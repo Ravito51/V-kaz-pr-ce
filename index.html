@@ -72,6 +72,10 @@
 
     .inline-check{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px}
     .inline-check input{width:auto;padding:0}
+    .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .tab-btn{width:auto;padding:8px 14px;border-radius:999px}
+    .tab-btn.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .muted-note{color:var(--muted);font-size:12px;margin-top:6px}
   </style>
 </head>
 <body>
@@ -139,13 +143,19 @@
           <button onclick="clearForm()">Vyčistit</button>
           <span class="pill" id="editPill" style="display:none;">Editace</span>
         </div>
-        <small class="hint">Zakázky se pamatují. Zaplacené se už standardně neschovávají mezi nedokončené.</small>
+        <small class="hint">Zakázky se pamatují. Otevřené, zaplacené i archiv jsou teď oddělené.</small>
       </div>
     </div>
 
     <div>
       <div class="card">
         <h3>Přehled</h3>
+
+        <div class="tabs">
+          <button class="tab-btn active" id="tabOpen" onclick="setView('open')">Otevřené</button>
+          <button class="tab-btn" id="tabPaid" onclick="setView('paid')">Zaplacené</button>
+          <button class="tab-btn" id="tabArchived" onclick="setView('archived')">Archiv</button>
+        </div>
 
         <div class="actions">
           <button onclick="setMonthRange()">Měsíc</button>
@@ -156,11 +166,10 @@
           <button onclick="setFilter('range')">Od–Do</button>
 
           <button class="primary" onclick="openPDFMenu()">PDF</button>
-
-          <label class="inline-check"><input type="checkbox" id="showPaidToggle" onchange="render()"> zobrazit i zaplacené</label>
         </div>
 
         <small class="hint">Dole se automaticky zobrazuje dnešek. Tlačítko Měsíc nastaví Od–Do na celý vybraný měsíc.</small>
+        <div class="muted-note" id="viewHint"></div>
 
         <div class="sum">
           <div>Celkem hodin: <b id="sumHours">0:00</b></div>
@@ -182,6 +191,7 @@
       <button onclick="startEditFromModal()">Upravit</button>
       <button onclick="confirmDeleteFromModal()">Smazat</button>
       <button id="modalPayBtn" class="ok" onclick="toggleCurrentJobPaid()">Označit jako zaplacené</button>
+      <button id="modalArchiveBtn" onclick="toggleCurrentJobArchived()">Archivovat</button>
       <button class="primary" onclick="closeModal()">Zavřít</button>
     </div>
   </div>
@@ -286,6 +296,7 @@
 <script>
   const KEY = "worklog_ravito_cz_v4";
   let filter = "day";
+  let currentView = "open";
   let editingId = null;
   let modalEntryId = null;
 
@@ -301,17 +312,42 @@
     try { return JSON.parse(localStorage.getItem(KEY+"_jobmeta") || "{}"); } catch { return {}; }
   }
   function saveJobMeta(meta){ localStorage.setItem(KEY+"_jobmeta", JSON.stringify(meta)); }
-  function isJobPaid(name){
+  function getJobMeta(name){
     const key = normalizeJobName(name);
-    if(!key) return false;
+    if(!key) return {};
     const meta = loadJobMeta();
-    return !!meta[key]?.paid;
+    return meta[key] || {};
+  }
+  function isJobPaid(name){
+    return !!getJobMeta(name).paid;
+  }
+  function isJobArchived(name){
+    return !!getJobMeta(name).archived;
   }
   function setJobPaid(name, paid){
     const key = normalizeJobName(name);
     if(!key) return;
     const meta = loadJobMeta();
-    meta[key] = { ...(meta[key] || {}), paid: !!paid, paidAt: paid ? new Date().toISOString() : null, displayName: String(name || "").trim() };
+    meta[key] = {
+      ...(meta[key] || {}),
+      paid: !!paid,
+      archived: paid ? !!meta[key]?.archived : false,
+      paidAt: paid ? new Date().toISOString() : null,
+      displayName: String(name || "").trim()
+    };
+    saveJobMeta(meta);
+  }
+  function setJobArchived(name, archived){
+    const key = normalizeJobName(name);
+    if(!key) return;
+    const meta = loadJobMeta();
+    meta[key] = {
+      ...(meta[key] || {}),
+      paid: meta[key]?.paid !== false,
+      archived: !!archived,
+      archivedAt: archived ? new Date().toISOString() : null,
+      displayName: String(name || "").trim()
+    };
     saveJobMeta(meta);
   }
 
@@ -431,11 +467,35 @@
     render();
   }
 
+  function setView(view){
+    currentView = view;
+    for(const id of ["tabOpen","tabPaid","tabArchived"]){
+      document.getElementById(id)?.classList.remove("active");
+    }
+    if(view === "open") document.getElementById("tabOpen")?.classList.add("active");
+    if(view === "paid") document.getElementById("tabPaid")?.classList.add("active");
+    if(view === "archived") document.getElementById("tabArchived")?.classList.add("active");
+
+    const hint = document.getElementById("viewHint");
+    if(hint){
+      if(view === "open") hint.textContent = "Zobrazené jsou jen aktivní nedokončené zakázky.";
+      if(view === "paid") hint.textContent = "Zobrazené jsou jen zaplacené zakázky, které ještě nejsou v archivu.";
+      if(view === "archived") hint.textContent = "Zobrazené jsou jen archivované zakázky.";
+    }
+    render();
+  }
+  function entryMatchesCurrentView(e){
+    const paid = isJobPaid(e.job);
+    const archived = isJobArchived(e.job);
+    if(currentView === "open") return !paid && !archived;
+    if(currentView === "paid") return paid && !archived;
+    if(currentView === "archived") return archived;
+    return true;
+  }
   function getVisibleEntries(){
-    const showPaid = !!document.getElementById("showPaidToggle")?.checked;
     return load()
       .filter(e => inFilter(e.date))
-      .filter(e => showPaid || !isJobPaid(e.job))
+      .filter(e => entryMatchesCurrentView(e))
       .sort((a,b) => (a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)));
   }
 
@@ -460,7 +520,7 @@
 
       const jobName = (e.job || "").trim() || "(bez zakázky)";
       const key = jobName.toLowerCase();
-      const cur = byJob.get(key) || { name: jobName, min:0, money:0, paid:isJobPaid(jobName) };
+      const cur = byJob.get(key) || { name: jobName, min:0, money:0, paid:isJobPaid(jobName), archived:isJobArchived(jobName) };
       cur.min += mins;
       cur.money += money;
       byJob.set(key, cur);
@@ -470,7 +530,9 @@
         lastDate = e.date;
       }
 
-      const badge = isJobPaid(e.job) ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Otevřené</span>';
+      const badge = isJobArchived(e.job)
+        ? '<span class="pill">Archiv</span>'
+        : (isJobPaid(e.job) ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Otevřené</span>');
       html += `
         <div class="entry" onclick="openEntryActions('${e.id}')">
           <div class="topline">
@@ -492,14 +554,16 @@
       .map(j => `
         <tr>
           <td>${esc(j.name)}</td>
-          <td>${j.paid ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Nedokončené</span>'}</td>
+          <td>${j.archived ? '<span class="pill">Archiv</span>' : (j.paid ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Nedokončené</span>')}</td>
           <td>${esc(formatHM(j.min))}</td>
           <td>${esc(formatMoney(j.money))}</td>
           <td>
             <div class="job-actions">
-              ${j.paid
-                ? `<button onclick="event.stopPropagation();markJobUnpaid('${esc(j.name).replaceAll("'","&#39;")}')">Znovu otevřít</button>`
-                : `<button class="ok" onclick="event.stopPropagation();markJobPaid('${esc(j.name).replaceAll("'","&#39;")}')">Označit zaplacené</button>`}
+              ${j.archived
+                ? `<button onclick="event.stopPropagation();restoreJobFromArchive('${esc(j.name).replaceAll("'","&#39;")}')">Vrátit z archivu</button>`
+                : (j.paid
+                  ? `<button onclick="event.stopPropagation();markJobUnpaid('${esc(j.name).replaceAll("'","&#39;")}')">Znovu otevřít</button><button class="warn" onclick="event.stopPropagation();archiveJob('${esc(j.name).replaceAll("'","&#39;")}')">Archivovat</button>`
+                  : `<button class="ok" onclick="event.stopPropagation();markJobPaid('${esc(j.name).replaceAll("'","&#39;")}')">Označit zaplacené</button>`)}
               <button onclick="event.stopPropagation();openPDFMenu('${esc(j.name).replaceAll("'","&#39;")}')">PDF zakázky</button>
             </div>
           </td>
@@ -508,7 +572,7 @@
 
     jobSumEl.innerHTML = rows ? `
       <div style="margin-top:14px;">
-        <div class="list-day">Souhrn zakázek</div>
+        <div class="list-day">${currentView === "archived" ? "Archiv zakázek" : (currentView === "paid" ? "Zaplacené zakázky" : "Otevřené zakázky")}</div>
         <table>
           <tr><th>Zakázka</th><th>Stav</th><th>Hodin</th><th>Částka</th><th>Akce</th></tr>
           ${rows}
@@ -532,13 +596,28 @@
       `Čistý čas: <b>${esc(formatHM(mins))}</b>, Částka: <b>${esc(formatMoney(money))}</b>`;
 
     const btn = document.getElementById("modalPayBtn");
+    const archiveBtn = document.getElementById("modalArchiveBtn");
     if(btn){
-      if(isJobPaid(e.job)) {
+      if(isJobArchived(e.job)) {
+        btn.textContent = "Znovu otevřít zakázku";
+        btn.className = "warn";
+      } else if(isJobPaid(e.job)) {
         btn.textContent = "Znovu otevřít zakázku";
         btn.className = "warn";
       } else {
         btn.textContent = "Označit jako zaplacené";
         btn.className = "ok";
+      }
+    }
+    if(archiveBtn){
+      if(isJobArchived(e.job)){
+        archiveBtn.textContent = "Vrátit z archivu";
+        archiveBtn.style.display = "inline-block";
+      } else if(isJobPaid(e.job)){
+        archiveBtn.textContent = "Archivovat";
+        archiveBtn.style.display = "inline-block";
+      } else {
+        archiveBtn.style.display = "none";
       }
     }
     document.getElementById("modalBackdrop").style.display = "flex";
@@ -585,12 +664,32 @@
   function markJobPaid(name){
     if(!(name||"").trim()) return alert("Není vyplněný název zakázky.");
     setJobPaid(name, true);
+    setJobArchived(name, false);
     render();
   }
   function markJobUnpaid(name){
     if(!(name||"").trim()) return;
     setJobPaid(name, false);
     render();
+  }
+  function archiveJob(name){
+    if(!(name||"").trim()) return;
+    if(!isJobPaid(name)) return alert("Do archivu jde přesunout jen zaplacená zakázka.");
+    setJobArchived(name, true);
+    if(currentView !== "archived") currentView = "paid";
+    render();
+  }
+  function restoreJobFromArchive(name){
+    if(!(name||"").trim()) return;
+    setJobArchived(name, false);
+    render();
+  }
+  function toggleCurrentJobArchived(){
+    const e = load().find(x => x.id === modalEntryId);
+    if(!e || !(e.job||"").trim()) return alert("Tento záznam nemá vyplněnou zakázku.");
+    if(isJobArchived(e.job)) restoreJobFromArchive(e.job);
+    else archiveJob(e.job);
+    closeModal();
   }
 
   function getLogoDataUri(){
@@ -859,7 +958,7 @@
     document.getElementById("gearBtn")?.addEventListener("click", openSettings);
     renderJobDatalist();
     refreshPDFJobSelect();
-    render();
+    setView("open");
   });
 </script>
 </body>

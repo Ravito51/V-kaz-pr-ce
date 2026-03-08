@@ -60,7 +60,15 @@
     .jobsum .job-actions{display:flex;gap:6px;flex-wrap:wrap}
 
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:12px;z-index:9999}
-    .modal{background:#fff;border-radius:14px;max-width:560px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px}
+    .modal{background:#fff;border-radius:14px;max-width:560px;width:min(100%, 560px);max-height:min(92vh, 980px);overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px}
+    .compact-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    @media (max-width: 720px){.compact-grid{grid-template-columns:1fr}}
+    .lookup-row{display:flex;gap:8px;align-items:end;flex-wrap:wrap}
+    .lookup-row > *{flex:1 1 180px}
+    .lookup-row button{flex:0 0 auto;width:auto}
+    .section-tight h3{margin-bottom:8px}
+    .section-tight .row,.section-tight .row-3,.section-tight .compact-grid{margin-top:8px}
+
     .modal h4{margin:0 0 10px 0}
     .modal .meta{color:var(--muted);font-size:12px;line-height:1.4;margin-bottom:10px}
     .modal .actions{justify-content:flex-end}
@@ -198,7 +206,7 @@
 </div>
 
 <div class="modal-backdrop" id="pdfBackdrop" onclick="closePDFMenu(event)">
-  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pdfTitle" onclick="event.stopPropagation()" style="max-width:760px;">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pdfTitle" onclick="event.stopPropagation()" style="max-width:960px;width:min(100%,960px);">
     <h4 id="pdfTitle">PDF / Faktura</h4>
     <div class="meta">
       Vyber, jestli chceš vytvořit pracovní výkaz, nebo rovnou fakturu.
@@ -225,9 +233,10 @@
       <select id="pdfJobSelect"></select>
     </div>
 
-    <div id="invoiceFields" style="display:none;margin-top:12px;">
-      <div class="card" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
-        <h3 style="margin-top:0;">Dodavatel</h3>
+    
+<div id="invoiceFields" style="display:none;margin-top:12px;">
+      <div class="card section-tight" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
+        <h3 style="margin-top:0;">Dodavatel / fakturant</h3>
         <div class="row-3">
           <div>
             <label>Fakturační profil</label>
@@ -242,7 +251,7 @@
             <input id="invoiceVariableSymbol" placeholder="např. 20260001">
           </div>
         </div>
-        <div class="row-3" style="margin-top:8px;">
+        <div class="row-3">
           <div>
             <label>Datum vystavení</label>
             <input id="invoiceIssueDate" type="date">
@@ -256,10 +265,54 @@
             <input id="invoiceDueDays" type="number" min="0" value="14" onchange="updateInvoiceDates()">
           </div>
         </div>
+        <div class="row-3">
+          <div>
+            <label>Název dodavatele</label>
+            <input id="invoiceSupplierName" placeholder="Jméno nebo firma">
+          </div>
+          <div>
+            <label>IČO</label>
+            <input id="invoiceSupplierIco" placeholder="IČO">
+          </div>
+          <div>
+            <label>DIČ</label>
+            <input id="invoiceSupplierDic" placeholder="DIČ">
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          <label>Adresa dodavatele</label>
+          <textarea id="invoiceSupplierAddress" rows="2" placeholder="Ulice, město, PSČ"></textarea>
+        </div>
+        <div class="compact-grid">
+          <div>
+            <label>Telefon</label>
+            <input id="invoiceSupplierPhone" placeholder="+420 ...">
+          </div>
+          <div>
+            <label>Email</label>
+            <input id="invoiceSupplierEmail" placeholder="email@...">
+          </div>
+          <div>
+            <label>Číslo účtu</label>
+            <input id="invoiceSupplierAccount" placeholder="123456789/0100">
+          </div>
+          <div>
+            <label>IBAN</label>
+            <input id="invoiceSupplierIban" placeholder="CZ...">
+          </div>
+        </div>
       </div>
 
-      <div class="card" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
+      <div class="card section-tight" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
         <h3 style="margin-top:0;">Odběratel</h3>
+        <div class="lookup-row">
+          <div>
+            <label>Hledat podle IČO / DIČ</label>
+            <input id="invoiceCustomerLookup" placeholder="např. 12345678 nebo CZ12345678" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupCustomerByTaxId();}">
+          </div>
+          <button type="button" onclick="lookupCustomerByTaxId()">Najít</button>
+        </div>
+        <div class="muted-note">Vyhledává se v dříve použitých odběratelích uložených v aplikaci. Po vystavení faktury se nový odběratel zapamatuje.</div>
         <div class="row-3">
           <div>
             <label>Název / jméno</label>
@@ -276,11 +329,11 @@
         </div>
         <div style="margin-top:8px;">
           <label>Adresa</label>
-          <textarea id="invoiceCustomerAddress" rows="3" placeholder="Ulice, město, PSČ"></textarea>
+          <textarea id="invoiceCustomerAddress" rows="2" placeholder="Ulice, město, PSČ"></textarea>
         </div>
       </div>
 
-      <div class="card" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
+      <div class="card section-tight" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
         <h3 style="margin-top:0;">Položka</h3>
         <div class="row">
           <div>
@@ -294,6 +347,7 @@
         </div>
       </div>
     </div>
+</div>
 
     <div class="actions" style="margin-top:12px;">
       <button onclick="printPDF('print')">Tisk</button>
@@ -472,6 +526,46 @@
   function setProfileCounter(n){ localStorage.setItem(KEY+"_profileCounter", String(n || 1)); }
   function getInvoiceCounter(){ return +(localStorage.getItem(KEY+"_invoiceCounter") || 1); }
   function setInvoiceCounter(n){ localStorage.setItem(KEY+"_invoiceCounter", String(n || 1)); }
+  function getInvoiceCustomers(){
+    try { return JSON.parse(localStorage.getItem(KEY+"_invoiceCustomers") || "[]"); } catch { return []; }
+  }
+  function saveInvoiceCustomers(list){
+    localStorage.setItem(KEY+"_invoiceCustomers", JSON.stringify(list || []));
+  }
+  function normalizeTaxId(v){
+    return String(v || '').replace(/\s+/g,'').toUpperCase();
+  }
+  function saveCustomerFromInvoice(invoiceData){
+    const name = String(invoiceData.customerName || '').trim();
+    const ico = String(invoiceData.customerIco || '').trim();
+    const dic = String(invoiceData.customerDic || '').trim();
+    const address = String(invoiceData.customerAddress || '').trim();
+    if(!name && !ico && !dic && !address) return;
+    const list = getInvoiceCustomers();
+    const keyIco = normalizeTaxId(ico);
+    const keyDic = normalizeTaxId(dic);
+    const idx = list.findIndex(c => (keyIco && normalizeTaxId(c.ico) === keyIco) || (keyDic && normalizeTaxId(c.dic) === keyDic) || (!keyIco && !keyDic && name && (c.name || '').trim().toLowerCase() === name.toLowerCase()));
+    const customer = { name, ico, dic, address, updatedAt: new Date().toISOString() };
+    if(idx >= 0) list[idx] = { ...list[idx], ...customer };
+    else list.unshift(customer);
+    saveInvoiceCustomers(list.slice(0, 300));
+  }
+  function fillCustomerForm(customer){
+    if(!customer) return false;
+    document.getElementById('invoiceCustomerName').value = customer.name || '';
+    document.getElementById('invoiceCustomerIco').value = customer.ico || '';
+    document.getElementById('invoiceCustomerDic').value = customer.dic || '';
+    document.getElementById('invoiceCustomerAddress').value = customer.address || '';
+    document.getElementById('invoiceCustomerLookup').value = customer.ico || customer.dic || customer.name || '';
+    return true;
+  }
+  function lookupCustomerByTaxId(){
+    const q = normalizeTaxId(document.getElementById('invoiceCustomerLookup')?.value || document.getElementById('invoiceCustomerIco')?.value || document.getElementById('invoiceCustomerDic')?.value || '');
+    if(!q) return alert('Zadej IČO nebo DIČ.');
+    const customer = getInvoiceCustomers().find(c => normalizeTaxId(c.ico) === q || normalizeTaxId(c.dic) === q);
+    if(!customer) return alert('V uložených odběratelích jsem nic nenašel.');
+    fillCustomerForm(customer);
+  }
   function ensureInvoiceProfiles(){
     const list = getInvoiceProfiles();
     if(list.length) return list;
@@ -613,6 +707,15 @@
     updateInvoiceDates();
     if(document.getElementById('invoiceItemLabel')) document.getElementById('invoiceItemLabel').value = 'Servisní práce dle výkazu';
     if(document.getElementById('invoiceNote')) document.getElementById('invoiceNote').value = p?.note || '';
+    document.getElementById('invoiceSupplierName').value = p?.supplierName || p?.profileName || '';
+    document.getElementById('invoiceSupplierAddress').value = p?.address || '';
+    document.getElementById('invoiceSupplierIco').value = p?.ico || '';
+    document.getElementById('invoiceSupplierDic').value = p?.dic || '';
+    document.getElementById('invoiceSupplierPhone').value = p?.phone || '';
+    document.getElementById('invoiceSupplierEmail').value = p?.email || '';
+    document.getElementById('invoiceSupplierAccount').value = p?.account || '';
+    document.getElementById('invoiceSupplierIban').value = p?.iban || '';
+    document.getElementById('invoiceCustomerLookup').value = '';
   }
   function handlePDFDocTypeChange(){
     const type = document.getElementById('pdfDocType')?.value || 'report';
@@ -1039,6 +1142,7 @@
       logo: localStorage.getItem(KEY+"_logo") || null,
       jobmeta: loadJobMeta(),
       invoiceProfiles: getInvoiceProfiles(),
+      invoiceCustomers: getInvoiceCustomers(),
       invoiceCounter: getInvoiceCounter(),
       exportedAt: new Date().toISOString()
     };
@@ -1062,6 +1166,7 @@
         if(data.logo) localStorage.setItem(KEY+"_logo", data.logo);
         if(data.jobmeta) saveJobMeta(data.jobmeta);
         if(Array.isArray(data.invoiceProfiles)) saveInvoiceProfiles(data.invoiceProfiles);
+        if(Array.isArray(data.invoiceCustomers)) saveInvoiceCustomers(data.invoiceCustomers);
         if(data.invoiceCounter) setInvoiceCounter(+data.invoiceCounter || 1);
         alert("Záloha byla nahrána.");
         location.reload();
@@ -1080,6 +1185,7 @@
     localStorage.removeItem(KEY+"_jobmeta");
     localStorage.removeItem(KEY+"_invoiceProfiles");
     localStorage.removeItem(KEY+"_invoiceCounter");
+    localStorage.removeItem(KEY+"_invoiceCustomers");
     alert("Data byla smazána.");
     location.reload();
   }
@@ -1185,12 +1291,23 @@
   }
   function collectInvoiceData(){
     const profileId = document.getElementById('invoiceProfileSelect')?.value || '';
-    const supplier = getInvoiceProfileById(profileId);
+    const profile = getInvoiceProfileById(profileId) || {};
     const issueDate = document.getElementById('invoiceIssueDate')?.value || new Date().toISOString().slice(0,10);
     const dueDate = document.getElementById('invoiceDueDate')?.value || issueDate;
     const rawNumber = document.getElementById('invoiceNumber')?.value || '';
     const invoiceNumber = consumeInvoiceNumber(rawNumber);
     const variableSymbol = (document.getElementById('invoiceVariableSymbol')?.value || invoiceNumber).replace(/\s+/g,'');
+    const supplier = {
+      ...profile,
+      supplierName: document.getElementById('invoiceSupplierName')?.value || profile.supplierName || profile.profileName || '',
+      address: document.getElementById('invoiceSupplierAddress')?.value || profile.address || '',
+      ico: document.getElementById('invoiceSupplierIco')?.value || profile.ico || '',
+      dic: document.getElementById('invoiceSupplierDic')?.value || profile.dic || '',
+      phone: document.getElementById('invoiceSupplierPhone')?.value || profile.phone || '',
+      email: document.getElementById('invoiceSupplierEmail')?.value || profile.email || '',
+      account: document.getElementById('invoiceSupplierAccount')?.value || profile.account || '',
+      iban: document.getElementById('invoiceSupplierIban')?.value || profile.iban || ''
+    };
     return {
       supplier,
       customerName: document.getElementById('invoiceCustomerName')?.value || '',
@@ -1282,6 +1399,7 @@
     const invoiceData = docType === 'invoice' ? collectInvoiceData() : null;
     const bodyHtml = docType === 'invoice' ? buildInvoiceHTML(entries, invoiceData) : reportBody;
     const pageTitle = docType === 'invoice' ? `Faktura ${invoiceData.invoiceNumber}` : 'Výkaz práce';
+    if(docType === 'invoice') saveCustomerFromInvoice(invoiceData);
 
     const w = window.open("", "_blank");
     w.document.write(`

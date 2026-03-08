@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>RAVITO – Pracovní deník (CZ)</title>
+  <style>
+    :root {
+      --brand:#0f3d6e;
+      --bg:#f6f7f9;
+      --card:#fff;
+      --text:#111;
+      --muted:#666;
+      --line:#e7e7e7;
+      --hover:#f0f6ff;
+    }
+    body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);margin:0;color:var(--text)}
+    header{background:var(--brand);color:#fff;padding:14px 16px}
+    header .top{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    h1{font-size:18px;margin:0}
+    .brand-sub{font-size:12px;opacity:.95;line-height:1.3}
+    main{padding:12px;max-width:1200px;margin:0 auto}
+    .grid{display:grid;grid-template-columns: 420px 1fr;gap:12px}
+    @media (max-width: 980px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+    @media (max-width: 720px){.row-3{grid-template-columns:1fr}}
+    label{font-size:12px;color:var(--muted)}
+    input,textarea,select,button{width:100%;padding:9px;border-radius:10px;border:1px solid #ddd;box-sizing:border-box}
+    textarea{resize:vertical}
+    button.primary{background:var(--brand);color:#fff;border:none}
+    button{background:#fff}
+    button:hover{filter:brightness(1.03);cursor:pointer}
+    button:disabled{opacity:.6;cursor:not-allowed}
+    .actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    .actions > *{flex: 0 0 auto}
+    .actions input[type="date"], .actions input[type="month"]{width:auto;min-width:160px}
+    .sum{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+    .sum b{font-size:16px}
+    .list-day{font-weight:800;margin-top:10px}
+    .hint{display:block;color:var(--muted);margin-top:6px;font-size:12px}
+    .entry{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:8px}
+    .entry:hover{background:var(--hover);cursor:pointer}
+    .entry .topline{display:grid;grid-template-columns: 140px 1fr 110px 110px;gap:8px;padding:8px}
+    @media (max-width: 720px){.entry .topline{grid-template-columns: 1fr 1fr;}}
+    .entry .desc{padding:0 8px 10px 8px;color:#222}
+    .pill{display:inline-block;padding:3px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:#222;background:#fff}
+    .logo-preview{border:1px dashed #c9c9c9;border-radius:12px;height:90px;display:flex;align-items:center;justify-content:center;color:var(--muted);background:#fafafa;overflow:hidden}
+    .logo-preview img{max-height:90px;max-width:100%}
+    .jobsum table{width:100%;border-collapse:collapse;margin-top:10px}
+    .jobsum th,.jobsum td{border-bottom:1px solid var(--line);padding:7px 8px;font-size:12.5px;text-align:left}
+    .jobsum th{background:#fafafa;font-weight:700}
+
+    /* Modal */
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:12px;z-index:9999}
+    .modal{background:#fff;border-radius:14px;max-width:520px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px}
+    .modal h4{margin:0 0 10px 0}
+    .modal .meta{color:var(--muted);font-size:12px;line-height:1.4;margin-bottom:10px}
+    .modal .actions{justify-content:flex-end}
+  
+    .hdr-right{display:flex;align-items:center;gap:12px;justify-content:flex-end}
+    .gear-btn{width:40px;height:40px;border-radius:14px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;font-size:18px;cursor:pointer}
+    .gear-btn:hover{background:rgba(255,255,255,.14)}
+    .gear-btn:active{transform:scale(.98)}
+
+  </style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div>
+      <h1>RAVITO – Pracovní deník</h1>
+      <div class="brand-sub">Přehled práce • Součty • PDF výkaz</div>
+    </div>
+    
+    <div class="hdr-right">
+      <div class="brand-sub" style="text-align:right">
+        <div><b>RAVITO</b></div>
+        <div>+420 776 829 454</div>
+        <div>baronvonkoniggratz@centrum.cz</div>
+      </div>
+      <button class="gear-btn" id="gearBtn" title="Nastavení" onclick="window.openSettings && window.openSettings()">⚙</button>
+    </div>
+    
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h3>Nový záznam</h3>
+
+        <div class="row">
+          <div>
+            <label>Datum</label>
+            <input type="date" id="date"/>
+          </div>
+          <div class="row">
+            <div>
+              <label>Od</label>
+              <input type="time" id="from"/>
+            </div>
+            <div>
+              <label>Do</label>
+              <input type="time" id="to"/>
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div>
+            <label>Přestávka (min)</label>
+            <input type="number" id="break" value="0" min="0"/>
+          </div>
+          <div>
+            <label>Sazba</label>
+            <input type="number" id="rate" value="600" min="0"/>
+          </div>
+        </div>
+
+        <label>Zakázka</label>
+        <input id="job" list="jobList" placeholder="např. Kubota – DPF"/>
+        <datalist id="jobList"></datalist>
+
+        <label>Popis práce</label>
+        <textarea id="desc" rows="3" placeholder="co se dělalo"></textarea>
+
+        <div class="actions" style="margin-top:10px;">
+          <button class="primary" onclick="addOrUpdateEntry()">Uložit</button>
+          <button onclick="clearForm()">Vyčistit</button>
+          <span class="pill" id="editPill" style="display:none;">Editace</span>
+        </div>
+        <small class="hint">Tip: zakázky se pamatují – příště se nabídnou automaticky.</small>
+      </div>
+
+      
+    </div>
+
+    <div>
+      <div class="card">
+        <h3>Přehled</h3>
+
+        <div class="actions">
+          <button onclick="setMonthRange()">Měsíc</button>
+          <input type="month" id="monthPick" title="Vyber měsíc"/>
+
+          <input type="date" id="fromRange"/>
+          <input type="date" id="toRange"/>
+          <button onclick="setFilter('range')">Od–Do</button>
+
+          <button class="primary" onclick="openPDFMenu()">PDF</button>
+        </div>
+
+        <small class="hint">Dole se automaticky zobrazuje <b>dnešek</b>. Tlačítko <b>Měsíc</b> nastaví Od–Do na celý vybraný měsíc.</small>
+
+        <div class="sum">
+          <div>Celkem hodin: <b id="sumHours">0:00</b></div>
+          <div>Celkem: <b id="sumMoney">0</b></div>
+        </div>
+
+        <div id="list" style="margin-top:10px;"></div>
+
+        <div class="jobsum" id="jobSummary"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Entry actions modal -->
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModal(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" onclick="event.stopPropagation()">
+    <h4 id="modalTitle">Záznam</h4>
+    <div class="meta" id="modalMeta"></div>
+    <div class="actions">
+      <button onclick="startEditFromModal()">Upravit</button>
+      <button onclick="confirmDeleteFromModal()">Smazat</button>
+      <button class="primary" onclick="closeModal()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- PDF menu modal -->
+<div class="modal-backdrop" id="pdfBackdrop" onclick="closePDFMenu(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="pdfTitle" onclick="event.stopPropagation()">
+    <h4 id="pdfTitle">PDF výkaz</h4>
+    <div class="meta">
+      Vyber akci:
+      <br>• <b>Tisk</b> = pošle na tiskárnu
+      <br>• <b>Uložit PDF</b> = v dialogu vyber „Uložit jako PDF“ (nebo Microsoft Print to PDF)
+    </div>
+    <div class="actions">
+      <button onclick="printPDF('print')">Tisk</button>
+      <button onclick="printPDF('save')" class="primary">Uložit PDF</button>
+      <button onclick="closePDFMenu()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Settings modal -->
+<div class="modal-backdrop" id="settingsBackdrop" onclick="closeSettings(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" onclick="event.stopPropagation()" style="max-width:720px;">
+    <h4 id="settingsTitle">Nastavení</h4>
+    <div class="meta">Všechno se ukládá jen do tohoto zařízení (lokálně v prohlížeči).</div>
+
+    <div class="card" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
+      <h3 style="margin-top:0;">Obecné</h3>
+      <div class="row-3">
+        <div>
+          <label>Výchozí hodinová sazba</label>
+          <input id="setDefaultRate" type="number" min="0" placeholder="např. 600">
+        </div>
+        <div>
+          <label>Měna</label>
+          <select id="setCurrency">
+            <option value="CZK">CZK</option>
+            <option value="EUR">EUR</option>
+            <option value="USD">USD</option>
+          </select>
+        </div>
+        <div>
+          <label>Jazyk</label>
+          <select id="setLang">
+            <option value="cs">Čeština</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row-3" style="margin-top:8px;">
+        <div>
+          <label>Název</label>
+          <input id="setName" placeholder="RAVITO">
+        </div>
+        <div>
+          <label>Telefon</label>
+          <input id="setPhone" placeholder="+420 ...">
+        </div>
+        <div>
+          <label>Email</label>
+          <input id="setEmail" placeholder="email@...">
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Logo (volitelné)</label>
+        <div class="logo-preview" id="logoPreview">Bez loga</div>
+        <div class="actions" style="margin-top:8px;">
+          <input type="file" id="logoFile" accept="image/*" style="width:auto;">
+          <button onclick="clearLogo()" style="width:auto;">Odebrat logo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="box-shadow:none;border:1px solid var(--line);">
+      <h3 style="margin-top:0;">Data</h3>
+      <input type="file" id="importFile" accept="application/json" style="display:none;">
+      <div class="actions">
+        <button onclick="saveSettingsModal()">Uložit nastavení</button>
+        <button onclick="document.getElementById('importFile').click()">Import zálohy</button>
+        <button onclick="exportData()">Export zálohy</button>
+        <button onclick="clearAllData()">Smazat data</button>
+      </div>
+    </div>
+
+    <div class="actions" style="margin-top:12px;">
+      <button class="primary" onclick="closeSettings()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const KEY = "worklog_ravito_cz_v4";
+  let filter = "day"; // default: dnešek
+  let editingId = null;
+  let modalEntryId = null;
+
+  function load(){ return JSON.parse(localStorage.getItem(KEY) || "[]"); }
+  function save(arr){ localStorage.setItem(KEY, JSON.stringify(arr)); }
+
+  function getSettings(){
+    try { return JSON.parse(localStorage.getItem(KEY+"_settings") || "{}"); } catch { return {}; }
+  }
+
+  function formatMoney(amount) {
+    const s = getSettings();
+    const cur = s.currency || "CZK";
+    try {
+      return new Intl.NumberFormat(undefined, { style:"currency", currency: cur }).format(amount);
+    } catch {
+      return amount + " " + cur;
+    }
+  }
+
+  function minutesBetween(a,b){
+    const [ah,am] = a.split(":").map(Number);
+    const [bh,bm] = b.split(":").map(Number);
+    let m = (bh*60+bm) - (ah*60+am);
+    if(m < 0) m += 24*60; // přes půlnoc
+    return m;
+  }
+
+  function formatHM(totalMin){
+    const h = Math.floor(totalMin/60);
+    const m = totalMin % 60;
+    return `${h}:${String(m).padStart(2,"0")}`;
+  }
+
+  function esc(s){ return String(s ?? "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;"); }
+
+  // ===== Zakázky (paměť + nabídky) =====
+  function loadJobs() {
+    try { return JSON.parse(localStorage.getItem(KEY+"_jobs") || "[]"); } catch { return []; }
+  }
+  function saveJobs(jobs) {
+    localStorage.setItem(KEY+"_jobs", JSON.stringify(jobs));
+  }
+  function rememberJob(name) {
+    const n = (name || "").trim();
+    if(!n) return;
+    const jobs = loadJobs();
+    const exists = jobs.some(j => j.toLowerCase() === n.toLowerCase());
+    if(!exists) {
+      jobs.push(n);
+      jobs.sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:"base"}));
+      saveJobs(jobs);
+      renderJobDatalist();
+    }
+  }
+  function renderJobDatalist() {
+    const dl = document.getElementById("jobList");
+    if(!dl) return;
+    const jobs = loadJobs();
+    dl.innerHTML = jobs.map(j => `<option value="${esc(j)}"></option>`).join("");
+  }
+
+  function clearForm(){
+    editingId = null;
+    document.getElementById("editPill").style.display = "none";
+    document.getElementById("job").value = "";
+    document.getElementById("desc").value = "";
+    document.getElementById("break").value = 0;
+  }
+
+  function addOrUpdateEntry(){
+    const rateVal = +(document.getElementById("rate").value || 0);
+    const e = {
+      id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
+      date: document.getElementById("date").value,
+      from: document.getElementById("from").value,
+      to: document.getElementById("to").value,
+      breakMin: +(document.getElementById("break").value || 0),
+      rate: rateVal,
+      job: (document.getElementById("job").value || "").trim(),
+      desc: (document.getElementById("desc").value || "").trim()
+    };
+    if(!e.date || !e.from || !e.to) return alert("Vyplň datum a časy.");
+
+    const arr = load();
+    const idx = arr.findIndex(x => x.id === e.id);
+    if(idx >= 0) arr[idx] = e; else arr.push(e);
+    save(arr);
+
+    rememberJob(e.job);
+
+    editingId = null;
+    document.getElementById("editPill").style.display = "none";
+
+    filter = "range";
+    document.getElementById("fromRange").value = e.date;
+    document.getElementById("toRange").value = e.date;
+    render();
+  }
+
+  function inFilter(dateStr){
+    const x = new Date(dateStr + "T00:00:00");
+    const now = new Date();
+
+    if(filter === "day") {
+      return x.toDateString() === now.toDateString();
+    }
+    if(filter === "range") {
+      const fVal = document.getElementById("fromRange").value;
+      const tVal = document.getElementById("toRange").value;
+      const f = fVal ? new Date(fVal + "T00:00:00") : null;
+      const t = tVal ? new Date(tVal + "T23:59:59") : null;
+      return (!f || x>=f) && (!t || x<=t);
+    }
+    return true;
+  }
+
+  function setFilter(f) {
+    filter = f;
+    render();
+  }
+
+  function setMonthRange() {
+    const m = document.getElementById("monthPick").value; // YYYY-MM
+    if(!m) return;
+    const [yy,mm] = m.split("-").map(Number);
+    const first = new Date(yy, mm-1, 1);
+    const last = new Date(yy, mm, 0);
+    const toISO = (d)=> d.toISOString().slice(0,10);
+    document.getElementById("fromRange").value = toISO(first);
+    document.getElementById("toRange").value = toISO(last);
+    filter = "range";
+    render();
+  }
+
+  function render(){
+    const listEl = document.getElementById("list");
+    const sumHoursEl = document.getElementById("sumHours");
+    const sumMoneyEl = document.getElementById("sumMoney");
+    const jobSumEl = document.getElementById("jobSummary");
+
+    const arr = load()
+      .filter(e => inFilter(e.date))
+      .sort((a,b) => (a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)));
+
+    let html = "";
+    let totalMin = 0;
+    let totalMoney = 0;
+    let lastDate = "";
+
+    const byJob = new Map();
+
+    for(const e of arr) {
+      const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+      const money = Math.round((mins/60) * (e.rate||0));
+      totalMin += mins;
+      totalMoney += money;
+
+      const jobName = (e.job || "").trim() || "(bez zakázky)";
+      const key = jobName.toLowerCase();
+      const cur = byJob.get(key) || { name: jobName, min:0, money:0 };
+      cur.min += mins;
+      cur.money += money;
+      cur.name = cur.name || jobName;
+      byJob.set(key, cur);
+
+      if(e.date !== lastDate) {
+        html += `<div class="list-day">${esc(e.date)}</div>`;
+        lastDate = e.date;
+      }
+
+      html += `
+        <div class="entry" onclick="openEntryActions('${e.id}')">
+          <div class="topline">
+            <div><b>${esc(e.from)}–${esc(e.to)}</b></div>
+            <div>${esc(e.job) || "<i>(bez zakázky)</i>"}</div>
+            <div>${esc(formatHM(mins))}</div>
+            <div>${esc(formatMoney(money))}</div>
+          </div>
+          <div class="desc">${esc(e.desc)}</div>
+        </div>`;
+    }
+
+    listEl.innerHTML = html || "<i>Žádné záznamy v období.</i>";
+    sumHoursEl.textContent = formatHM(totalMin);
+    sumMoneyEl.textContent = formatMoney(totalMoney);
+
+    const rows = Array.from(byJob.values())
+      .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:"base"}))
+      .map(j => `<tr><td>${esc(j.name)}</td><td>${esc(formatHM(j.min))}</td><td>${esc(formatMoney(j.money))}</td></tr>`)
+      .join("");
+
+    jobSumEl.innerHTML = rows ? `
+      <div style="margin-top:14px;">
+        <div class="list-day">Souhrn zakázek</div>
+        <table>
+          <tr><th>Zakázka</th><th>Hodin</th><th>Částka</th></tr>
+          ${rows}
+        </table>
+      </div>` : "";
+  }
+
+  // ===== Entry modal actions =====
+  function openEntryActions(id){
+    modalEntryId = id;
+    const arr = load();
+    const e = arr.find(x => x.id === id);
+    if(!e) return;
+
+    const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+    const money = Math.round((mins/60) * (e.rate||0));
+
+    document.getElementById("modalMeta").innerHTML =
+      `Datum: <b>${esc(e.date)}</b><br>`+
+      `Čas: <b>${esc(e.from)}–${esc(e.to)}</b>, Přestávka: <b>${esc(e.breakMin||0)} min</b><br>`+
+      `Zakázka: <b>${esc(e.job || "—")}</b><br>`+
+      `Čistý čas: <b>${esc(formatHM(mins))}</b>, Částka: <b>${esc(formatMoney(money))}</b>`;
+
+    document.getElementById("modalBackdrop").style.display = "flex";
+  }
+
+  function closeModal(ev){
+    if(ev && ev.target && ev.target.id === "modalBackdrop"){
+      document.getElementById("modalBackdrop").style.display = "none";
+      modalEntryId = null;
+      return;
+    }
+    document.getElementById("modalBackdrop").style.display = "none";
+    modalEntryId = null;
+  }
+
+  function startEditFromModal(){
+    const arr = load();
+    const e = arr.find(x => x.id === modalEntryId);
+    if(!e) return;
+
+    document.getElementById("date").value = e.date;
+    document.getElementById("from").value = e.from;
+    document.getElementById("to").value = e.to;
+    document.getElementById("break").value = e.breakMin||0;
+    document.getElementById("rate").value = e.rate||0;
+    document.getElementById("job").value = e.job||"";
+    document.getElementById("desc").value = e.desc||"";
+
+    editingId = e.id;
+    document.getElementById("editPill").style.display = "inline-block";
+    closeModal();
+  }
+
+  function confirmDeleteFromModal(){
+    if(!modalEntryId) return;
+    if(!confirm("Opravdu chceš tento záznam trvale smazat?")) return;
+    const arr = load().filter(x => x.id !== modalEntryId);
+    save(arr);
+    if(editingId === modalEntryId) editingId = null;
+    document.getElementById("editPill").style.display = "none";
+    closeModal();
+    render();
+  }
+
+  // ===== PDF menu =====
+  function openPDFMenu(){
+    document.getElementById("pdfBackdrop").style.display = "flex";
+  }
+  function closePDFMenu(ev){
+    if(ev && ev.target && ev.target.id === "pdfBackdrop"){
+      document.getElementById("pdfBackdrop").style.display = "none";
+      return;
+    }
+    const el = document.getElementById("pdfBackdrop");
+    if(el) el.style.display = "none";
+  }
+
+  // ===== Settings (public) =====
+  function getLogoDataUri(){
+    return localStorage.getItem(KEY+"_logo") || "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg==";
+  }
+
+  function saveSettings(){
+    const s = {
+      lang: document.getElementById("setLang")?.value || "cs",
+      currency: document.getElementById("setCurrency")?.value || "CZK",
+      defaultRate: +(document.getElementById("setDefaultRate")?.value || 0),
+      name: (document.getElementById("setName")?.value || "").trim(),
+      phone: (document.getElementById("setPhone")?.value || "").trim(),
+      email: (document.getElementById("setEmail")?.value || "").trim()
+    };
+    localStorage.setItem(KEY+"_settings", JSON.stringify(s));
+    if(s.defaultRate > 0) document.getElementById("rate").value = s.defaultRate;
+    alert("Uloženo.");
+    render();
+  }
+
+  function clearLogo(){
+    localStorage.removeItem(KEY+"_logo");
+    const p = document.getElementById("logoPreview");
+    if(p) p.textContent = "Bez loga";
+  }
+
+  // ===== Settings modal =====
+  function populateSettingsForm(){
+    const s = getSettings();
+    const langSel = document.getElementById("setLang"); if(langSel) langSel.value = s.lang || "cs";
+    const curSel = document.getElementById("setCurrency"); if(curSel) curSel.value = s.currency || "CZK";
+    const dr = document.getElementById("setDefaultRate"); if(dr) dr.value = s.defaultRate || "";
+    const nm = document.getElementById("setName"); if(nm) nm.value = s.name || "";
+    const ph = document.getElementById("setPhone"); if(ph) ph.value = s.phone || "";
+    const em = document.getElementById("setEmail"); if(em) em.value = s.email || "";
+
+    const p = document.getElementById("logoPreview");
+    const ld = localStorage.getItem(KEY+"_logo");
+    if(p) {
+      if(ld) p.innerHTML = `<img src="${ld}" alt="logo"/>`;
+      else p.textContent = "Bez loga";
+    }
+  }
+
+  function openSettings(){
+    populateSettingsForm();
+    const el = document.getElementById("settingsBackdrop");
+    if(el) el.style.display = "flex";
+  }
+
+  function closeSettings(ev){
+    if(ev && ev.target && ev.target.id !== "settingsBackdrop") return;
+    const el = document.getElementById("settingsBackdrop");
+    if(el) el.style.display = "none";
+  }
+
+  function saveSettingsModal(){
+    saveSettings();
+    populateSettingsForm();
+  }
+
+  function exportData(){
+    const payload = {
+      version: KEY,
+      exportedAt: new Date().toISOString(),
+      entries: load(),
+      settings: getSettings(),
+      jobs: loadJobs(),
+      logo: localStorage.getItem(KEY+"_logo") || null
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0,19).replace(/[T:]/g, "-");
+    a.href = url;
+    a.download = `ravito-zaloha-${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function handleImport(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const raw = JSON.parse(reader.result);
+
+        if(Array.isArray(raw)) {
+          save(raw);
+          render();
+          alert("Záloha byla načtena.");
+          return;
+        }
+
+        const entries = Array.isArray(raw.entries) ? raw.entries : [];
+        const settings = raw.settings && typeof raw.settings === "object" ? raw.settings : null;
+        const jobs = Array.isArray(raw.jobs) ? raw.jobs : null;
+        const logo = typeof raw.logo === "string" ? raw.logo : null;
+
+        save(entries);
+        if(settings) localStorage.setItem(KEY+"_settings", JSON.stringify(settings));
+        if(jobs) saveJobs(jobs);
+        if(logo) localStorage.setItem(KEY+"_logo", logo);
+        else if(Object.prototype.hasOwnProperty.call(raw, "logo")) localStorage.removeItem(KEY+"_logo");
+
+        populateSettingsForm();
+        renderJobDatalist();
+        render();
+        alert("Záloha byla načtena.");
+      } catch (err) {
+        console.error(err);
+        alert("Soubor se nepodařilo načíst. Zkontroluj, že jde o platnou JSON zálohu.");
+      }
+    };
+    reader.readAsText(file, "utf-8");
+  }
+
+  function clearAllData(){
+    if(!confirm("Opravdu chceš smazat všechna lokálně uložená data?")) return;
+    localStorage.removeItem(KEY);
+    localStorage.removeItem(KEY+"_settings");
+    localStorage.removeItem(KEY+"_jobs");
+    localStorage.removeItem(KEY+"_logo");
+    editingId = null;
+    modalEntryId = null;
+    clearForm();
+    populateSettingsForm();
+    renderJobDatalist();
+    render();
+    alert("Data byla smazána.");
+  }
+
+  // ===== PDF =====
+  function periodText(){
+    if(filter === "day") {
+      const today = new Date().toISOString().slice(0,10);
+      return `${today} až ${today}`;
+    }
+    const fr = document.getElementById("fromRange").value || "—";
+    const tr = document.getElementById("toRange").value || "—";
+    return `${fr} až ${tr}`;
+  }
+
+  function buildPDFByJob(){
+    const arr = load()
+      .filter(e => inFilter(e.date))
+      .sort((a,b) => (a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)));
+
+    const groups = new Map();
+    for(const e of arr){
+      const jobName = (e.job || "").trim() || "(bez zakázky)";
+      const key = jobName.toLowerCase();
+      const g = groups.get(key) || { name: jobName, entries: [] };
+      g.entries.push(e);
+      g.name = g.name || jobName;
+      groups.set(key, g);
+    }
+
+    const jobList = Array.from(groups.values())
+      .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:"base"}));
+
+    if(jobList.length === 0) {
+      return `<p><i>Žádné záznamy v období.</i></p>`;
+    }
+
+    let out = "";
+    for(const g of jobList){
+      let jobMin = 0;
+      let jobMoney = 0;
+
+      const rows = g.entries
+        .sort((a,b)=>(a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)))
+        .map(e=>{
+          const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+          const money = Math.round((mins/60) * (e.rate||0));
+          jobMin += mins;
+          jobMoney += money;
+          return `
+            <tr>
+              <td>${esc(e.date)}</td>
+              <td>${esc(e.from)}–${esc(e.to)}</td>
+              <td>${esc(e.breakMin||0)} min</td>
+              <td>${esc(formatHM(mins))}</td>
+              <td>${esc(e.desc)}</td>
+              <td>${esc(e.rate||0)}</td>
+              <td>${esc(formatMoney(money))}</td>
+            </tr>`;
+        }).join("");
+
+      out += `
+        <div class="jobblock">
+          <h2>${esc(g.name)}</h2>
+          <table>
+            <tr>
+              <th>Datum</th><th>Od–Do</th><th>Přestávka</th><th>Čistý čas</th><th>Popis</th><th>Sazba</th><th>Částka</th>
+            </tr>
+            ${rows}
+          </table>
+          <div class="subtotal">
+            <b>Součet:</b> ${esc(formatHM(jobMin))} &nbsp;|&nbsp; <b>Celkem:</b> ${esc(formatMoney(jobMoney))}
+          </div>
+        </div>
+      `;
+    }
+    return out;
+  }
+
+  function printPDF(mode){
+    closePDFMenu();
+    if(mode === "save") {
+      alert("V dialogu tisku vyber jako tiskárnu: „Uložit jako PDF“ (nebo Microsoft Print to PDF).");
+    }
+
+    const w = window.open("", "_blank");
+    if(!w){
+      alert("Pro tisk je potřeba povolit otevírání nového okna / vyskakovací okna.");
+      return;
+    }
+
+    const fallbackLogo = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI3MDAiIGhlaWdodD0iMjIwIiB2aWV3Qm94PSIwIDAgNzAwIDIyMCI+PHJlY3Qgd2lkdGg9IjcwMCIgaGVpZ2h0PSIyMjAiIGZpbGw9IndoaXRlIi8+PGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoNDAsMzApIj48cGF0aCBkPSJNMCwwaDkwYTQ1LDQ1IDAgMCAxIDAsOTBoLTQ1bDU4LDcwaC00MGwtNTgtNzB2NzBoLTM1eiBNMzUsMzV2MzVoNDhhMTcsMTcgMCAwIDAgMCwtMzV6IiBmaWxsPSIjMGYzZDZlIi8+PHRleHQgeD0iMTQwIiB5PSI3MCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjcyIiBmb250LXdlaWdodD0iODAwIiBmaWxsPSIjMTExIj5SQVZJVE88L3RleHQ+PHRleHQgeD0iMTQwIiB5PSIxMTIiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxOCIgZmlsbD0iIzQ0NCI+KzQyMCA3NzYgODI5IDQ1NCAg4oCiICBiYXJvbnZvbmtvbmlnZ3JhdHpAY2VudHJ1bS5jejwvdGV4dD48cmVjdCB4PSIxNDAiIHk9IjEyOCIgd2lkdGg9IjQ5MCIgaGVpZ2h0PSIxMCIgZmlsbD0iIzBmM2Q2ZSIgcng9IjUiLz48dGV4dCB4PSIxNDAiIHk9IjE3MCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE2IiBmaWxsPSIjNjY2Ij5TZXJ2aXMg4oCiIEV2aWRlbmNlIHByw6FjZSDigKIgUMWZZWhsZWQ8L3RleHQ+PC9nPjwvc3ZnPg==";
+    const logo = localStorage.getItem(KEY+"_logo") || fallbackLogo;
+
+    w.document.write(`
+      <html><head><meta charset="utf-8">
+      <title>Výkaz práce</title>
+      <style>
+        body{font-family:Arial,sans-serif;padding:18px}
+        .header{text-align:center;margin-bottom:14px}
+        .logo{width:75%;max-width:900px;height:auto;margin-bottom:12px;display:inline-block}
+        h1{margin:0 0 6px 0;letter-spacing:.4px}
+        .meta{color:#333;margin:0;line-height:1.35}
+        h2{margin:18px 0 8px 0;font-size:14px}
+        table{width:100%;border-collapse:collapse}
+        th,td{border:1px solid #ddd;padding:6px;font-size:12px;vertical-align:top}
+        th{background:#f3f3f3}
+        .jobblock{page-break-inside:avoid}
+        .subtotal{margin-top:8px;font-size:12.5px}
+      </style></head><body>
+        <div class="header">
+          <img class="logo" src="${logo}" alt="logo"/>
+          <h1>VÝKAZ PRÁCE</h1>
+          <p class="meta">Období: <b>${esc(periodText())}</b></p>
+        </div>
+        ${buildPDFByJob()}
+      </body></html>
+    `);
+
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+  // Init
+  document.addEventListener("DOMContentLoaded", () => {
+    const today = new Date().toISOString().slice(0,10);
+    document.getElementById("date").value = today;
+
+    document.getElementById("monthPick").value = today.slice(0,7);
+    document.getElementById("fromRange").value = today;
+    document.getElementById("toRange").value = today;
+
+    const s = getSettings();
+    if(s.defaultRate && s.defaultRate > 0) document.getElementById("rate").value = s.defaultRate;
+
+    const langSel = document.getElementById("setLang"); if(langSel && s.lang) langSel.value = s.lang;
+    const curSel = document.getElementById("setCurrency"); if(curSel && s.currency) curSel.value = s.currency;
+    const dr = document.getElementById("setDefaultRate"); if(dr && s.defaultRate) dr.value = s.defaultRate;
+    const nm = document.getElementById("setName"); if(nm) nm.value = s.name || "";
+    const ph = document.getElementById("setPhone"); if(ph) ph.value = s.phone || "";
+    const em = document.getElementById("setEmail"); if(em) em.value = s.email || "";
+
+    const p = document.getElementById("logoPreview");
+    const ld = localStorage.getItem(KEY+"_logo");
+    if(p) {
+      if(ld) p.innerHTML = `<img src="${ld}" alt="logo"/>`;
+      else p.textContent = "Bez loga";
+    }
+
+    const lf = document.getElementById("logoFile");
+    if(lf) {
+      lf.addEventListener("change", (ev) => {
+        const file = ev.target.files?.[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          localStorage.setItem(KEY+"_logo", reader.result);
+          if(p) p.innerHTML = `<img src="${reader.result}" alt="logo"/>`;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    const importEl = document.getElementById("importFile");
+    if(importEl){
+      importEl.addEventListener("change", (ev) => {
+        const f = ev.target.files?.[0];
+        if(f) handleImport(f);
+        ev.target.value = "";
+      });
+    }
+
+    const gb = document.getElementById("gearBtn");
+    if(gb){
+      gb.addEventListener("click", () => { if(window.openSettings) window.openSettings(); });
+    }
+
+    renderJobDatalist();
+    render();
+  });
+</script>
+</body>
+</html>

@@ -240,7 +240,7 @@
         <div class="row-3">
           <div>
             <label>Fakturační profil</label>
-            <select id="invoiceProfileSelect"></select>
+            <select id="invoiceProfileSelect" onchange="initInvoiceFormDefaults(this.value)"></select>
           </div>
           <div>
             <label>Číslo faktury</label>
@@ -301,6 +301,9 @@
             <input id="invoiceSupplierIban" placeholder="CZ...">
           </div>
         </div>
+        <div class="actions" style="margin-top:8px;">
+          <button type="button" onclick="saveCurrentSupplierToSelectedProfile()">Uložit údaje dodavatele do profilu</button>
+        </div>
       </div>
 
       <div class="card section-tight" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
@@ -310,9 +313,10 @@
             <label>Hledat podle IČO / DIČ</label>
             <input id="invoiceCustomerLookup" placeholder="např. 12345678 nebo CZ12345678" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupCustomerByTaxId();}">
           </div>
-          <button type="button" onclick="lookupCustomerByTaxId()">Najít</button>
+          <button type="button" onclick="lookupCustomerByTaxId()">Najít online</button>
         </div>
-        <div class="muted-note">Vyhledává se v dříve použitých odběratelích uložených v aplikaci. Po vystavení faktury se nový odběratel zapamatuje.</div>
+        <div class="muted-note">Aplikace nejdřív zkusí dohledat firmu online v ARESu podle IČO. Když nenajde nic online, zkusí uložené odběratele v aplikaci. U DIČ ve tvaru CZ12345678 se použije IČO 12345678.</div>
+        <div class="meta" id="invoiceLookupStatus" style="margin-top:6px;"></div>
         <div class="row-3">
           <div>
             <label>Název / jméno</label>
@@ -535,6 +539,21 @@
   function normalizeTaxId(v){
     return String(v || '').replace(/\s+/g,'').toUpperCase();
   }
+  function extractIcoFromLookup(v){
+    const raw = normalizeTaxId(v);
+    if(!raw) return '';
+    if(/^\d{8}$/.test(raw)) return raw;
+    const cz = raw.match(/^CZ(\d{8})$/);
+    if(cz) return cz[1];
+    const digits = raw.replace(/\D/g,'');
+    return /^\d{8}$/.test(digits) ? digits : '';
+  }
+  function setInvoiceLookupStatus(msg='', isError=false){
+    const el = document.getElementById('invoiceLookupStatus');
+    if(!el) return;
+    el.textContent = msg || '';
+    el.style.color = isError ? '#b00020' : 'var(--muted)';
+  }
   function saveCustomerFromInvoice(invoiceData){
     const name = String(invoiceData.customerName || '').trim();
     const ico = String(invoiceData.customerIco || '').trim();
@@ -559,12 +578,100 @@
     document.getElementById('invoiceCustomerLookup').value = customer.ico || customer.dic || customer.name || '';
     return true;
   }
-  function lookupCustomerByTaxId(){
-    const q = normalizeTaxId(document.getElementById('invoiceCustomerLookup')?.value || document.getElementById('invoiceCustomerIco')?.value || document.getElementById('invoiceCustomerDic')?.value || '');
+  async function lookupCustomerByTaxId(){
+    const raw = document.getElementById('invoiceCustomerLookup')?.value || document.getElementById('invoiceCustomerIco')?.value || document.getElementById('invoiceCustomerDic')?.value || '';
+    const q = normalizeTaxId(raw);
     if(!q) return alert('Zadej IČO nebo DIČ.');
-    const customer = getInvoiceCustomers().find(c => normalizeTaxId(c.ico) === q || normalizeTaxId(c.dic) === q);
-    if(!customer) return alert('V uložených odběratelích jsem nic nenašel.');
-    fillCustomerForm(customer);
+    const ico = extractIcoFromLookup(q);
+    setInvoiceLookupStatus('');
+    if(ico){
+      try{
+        setInvoiceLookupStatus('Hledám firmu online v ARESu…');
+        const res = await fetch(`https://ares.gov.cz/ekonomicke-subjekty-v-be/rest/ekonomicke-subjekty/${encodeURIComponent(ico)}`, {
+          headers: { 'Accept': 'application/json' }
+        });
+        if(res.ok){
+          const data = await res.json();
+          const customer = mapAresCompanyToCustomer(data, raw);
+          if(customer && (customer.name || customer.address || customer.ico || customer.dic)){
+            fillCustomerForm(customer);
+            saveCustomerFromInvoice({
+              customerName: customer.name || '',
+              customerAddress: customer.address || '',
+              customerIco: customer.ico || '',
+              customerDic: customer.dic || ''
+            });
+            setInvoiceLookupStatus('Firma byla načtena online z ARESu.');
+            return;
+          }
+        }
+      }catch(err){
+        console.warn('ARES lookup failed', err);
+      }
+    }
+    const customer = getInvoiceCustomers().find(c => normalizeTaxId(c.ico) === q || normalizeTaxId(c.dic) === q || (ico && normalizeTaxId(c.ico) === ico));
+    if(customer){
+      fillCustomerForm(customer);
+      setInvoiceLookupStatus('Online dohledání se nepovedlo, použil jsem uloženého odběratele z aplikace.');
+      return;
+    }
+    setInvoiceLookupStatus('Firma nebyla nalezena online ani v uložených odběratelích.', true);
+    alert('Firmu jsem nenašel online ani v uložených odběratelích.');
+  }
+  function mapAresCompanyToCustomer(data, fallback=''){
+    if(!data || typeof data !== 'object') return null;
+    const sidlo = data.sidlo || data.adresaDorucovaci || data.adresa || {};
+    const parts = [
+      sidlo.textovaAdresa,
+      sidlo.radekAdresy1,
+      sidlo.radekAdresy2,
+      sidlo.radekAdresy3,
+      [sidlo.nazevUlice, sidlo.cisloDomovni, sidlo.cisloOrientacni ? '/' + sidlo.cisloOrientacni : ''].filter(Boolean).join(' '),
+      [sidlo.nazevObce, sidlo.psc].filter(Boolean).join(' ')
+    ].filter(Boolean);
+    const name = data.obchodniJmeno || data.nazev || data.jmeno || '';
+    const ico = String(data.ico || extractIcoFromLookup(fallback) || '').trim();
+    let dic = String(data.dic || '').trim();
+    if(!dic && /^\d{8}$/.test(ico)) dic = 'CZ' + ico;
+    return {
+      name,
+      ico,
+      dic,
+      address: parts.filter((v, i, arr) => arr.indexOf(v) === i).join('\n')
+    };
+  }
+  function getCurrentSupplierFromInvoiceForm(){
+    return {
+      supplierName: document.getElementById('invoiceSupplierName')?.value || '',
+      address: document.getElementById('invoiceSupplierAddress')?.value || '',
+      ico: document.getElementById('invoiceSupplierIco')?.value || '',
+      dic: document.getElementById('invoiceSupplierDic')?.value || '',
+      phone: document.getElementById('invoiceSupplierPhone')?.value || '',
+      email: document.getElementById('invoiceSupplierEmail')?.value || '',
+      account: document.getElementById('invoiceSupplierAccount')?.value || '',
+      iban: document.getElementById('invoiceSupplierIban')?.value || ''
+    };
+  }
+  function saveCurrentSupplierToSelectedProfile(silent){
+    const id = document.getElementById('invoiceProfileSelect')?.value || '';
+    if(!id) return;
+    const list = ensureInvoiceProfiles().slice();
+    const idx = list.findIndex(p => p.id === id);
+    if(idx < 0) return;
+    const current = getCurrentSupplierFromInvoiceForm();
+    list[idx] = {
+      ...list[idx],
+      supplierName: current.supplierName || list[idx].supplierName || '',
+      address: current.address || '',
+      ico: current.ico || '',
+      dic: current.dic || '',
+      phone: current.phone || '',
+      email: current.email || '',
+      account: current.account || '',
+      iban: current.iban || ''
+    };
+    saveInvoiceProfiles(list);
+    if(!silent) alert('Údaje dodavatele jsou uložené do vybraného profilu.');
   }
   function ensureInvoiceProfiles(){
     const list = getInvoiceProfiles();
@@ -1332,6 +1439,21 @@
     }
     return { minutes, total };
   }
+  function makeSpdString(invoiceData, amount){
+    const supplier = invoiceData?.supplier || {};
+    const account = String(supplier.account || '').trim();
+    const iban = String(supplier.iban || '').trim().replace(/\s+/g,'');
+    const currency = getSettings()?.currency || 'CZK';
+    if(!iban && !account) return '';
+    const parts = ['SPD*1.0'];
+    if(iban) parts.push(`ACC:${iban}`);
+    else parts.push(`ACC:${account}`);
+    parts.push(`AM:${Number(amount || 0).toFixed(2)}`);
+    parts.push(`CC:${currency}`);
+    if(invoiceData?.variableSymbol) parts.push(`X-VS:${String(invoiceData.variableSymbol).replace(/\D/g,'').slice(0,10)}`);
+    if(invoiceData?.invoiceNumber) parts.push(`MSG:Faktura ${String(invoiceData.invoiceNumber).slice(0,60)}`);
+    return parts.join('*');
+  }
   function buildInvoiceHTML(entries, invoiceData){
     if(!entries.length) return `<p><i>Žádné záznamy k fakturaci.</i></p>`;
     const supplier = invoiceData.supplier || {};
@@ -1339,6 +1461,8 @@
     const selectedJob = document.getElementById('pdfJobSelect')?.value || '';
     const totals = getInvoiceTotals(entries, supplier);
     const itemLabel = invoiceData.itemLabel || 'Servisní práce dle výkazu';
+    const spd = makeSpdString(invoiceData, totals.total);
+    const qrUrl = spd ? `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(spd)}` : '';
     const rows = entries.map(e => {
       const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
       const hours = mins / 60;
@@ -1375,7 +1499,14 @@
         <tr><td colspan="4" style="text-align:right"><b>Celkem</b></td><td><b>${esc(formatMoney(totals.total))}</b></td></tr>
       </table>
       <div class="subtotal"><b>Odpracováno:</b> ${esc(formatHM(totals.minutes))}</div>
-      ${invoiceData.note ? `<p class="meta" style="margin-top:10px;"><b>Poznámka:</b> ${esc(invoiceData.note)}</p>` : ''}
+      <div class="party-grid" style="align-items:start;">
+        <div>
+          ${invoiceData.note ? `<p class="meta" style="margin-top:10px;"><b>Poznámka:</b> ${esc(invoiceData.note)}</p>` : ''}
+        </div>
+        <div style="text-align:right;">
+          ${qrUrl ? `<div class="meta" style="margin-bottom:6px;"><b>QR platba</b></div><img src="${qrUrl}" alt="QR platba" style="width:150px;height:150px;border:1px solid #ddd;padding:4px;background:#fff;">` : ''}
+        </div>
+      </div>
     `;
   }
   function printPDF(mode){
@@ -1399,7 +1530,7 @@
     const invoiceData = docType === 'invoice' ? collectInvoiceData() : null;
     const bodyHtml = docType === 'invoice' ? buildInvoiceHTML(entries, invoiceData) : reportBody;
     const pageTitle = docType === 'invoice' ? `Faktura ${invoiceData.invoiceNumber}` : 'Výkaz práce';
-    if(docType === 'invoice') saveCustomerFromInvoice(invoiceData);
+    if(docType === 'invoice') { saveCustomerFromInvoice(invoiceData); saveCurrentSupplierToSelectedProfile(true); }
 
     const w = window.open("", "_blank");
     w.document.write(`

@@ -58,6 +58,11 @@
     .jobsum th,.jobsum td{border-bottom:1px solid var(--line);padding:7px 8px;font-size:12.5px;text-align:left;vertical-align:top}
     .jobsum th{background:#fafafa;font-weight:700}
     .jobsum .job-actions{display:flex;gap:6px;flex-wrap:wrap}
+    .submeta{font-size:12px;color:var(--muted);margin-top:4px}
+    .thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .thumbs img{width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#fff}
+    .history-item{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;background:#fff}
+    .history-item .meta-line{font-size:12px;color:var(--muted);margin-top:4px}
 
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:12px;z-index:9999}
     .modal{background:#fff;border-radius:14px;max-width:560px;width:min(100%, 560px);max-height:min(92vh, 980px);overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px}
@@ -92,7 +97,7 @@
   <div class="top">
     <div>
       <h1>RAVITO – Pracovní deník</h1>
-      <div class="brand-sub">Přehled práce • Součty • PDF výkaz</div>
+      <div class="brand-sub">Verze 2.0 • přehled práce • faktury • historie stroje • fotky</div>
     </div>
 
     <div class="hdr-right">
@@ -144,8 +149,23 @@
         <input id="job" list="jobList" placeholder="např. Kubota – DPF"/>
         <datalist id="jobList"></datalist>
 
+        <div class="row">
+          <div>
+            <label>Zákazník</label>
+            <input id="customer" placeholder="firma / jméno"/>
+          </div>
+          <div>
+            <label>Stroj / SPZ / VIN</label>
+            <input id="machine" placeholder="např. CAT GP18N / Manitou MRT 2150"/>
+          </div>
+        </div>
+
         <label>Popis práce</label>
         <textarea id="desc" rows="3" placeholder="co se dělalo"></textarea>
+
+        <label>Fotky k záznamu</label>
+        <input type="file" id="photos" accept="image/*" multiple/>
+        <small class="hint">Fotky se uloží do zařízení. U většího množství drž rozumný počet, ať zbytečně nebobtná localStorage.</small>
 
         <div class="actions" style="margin-top:10px;">
           <button class="primary" onclick="addOrUpdateEntry()">Uložit</button>
@@ -188,6 +208,20 @@
         <div id="list" style="margin-top:10px;"></div>
         <div class="jobsum" id="jobSummary"></div>
       </div>
+      <div class="card">
+        <h3>Historie stroje / zákazníka</h3>
+        <div class="row">
+          <div>
+            <label>Hledat stroj</label>
+            <input id="historyMachine" placeholder="např. Manitou / SPZ / VIN" oninput="renderHistory()"/>
+          </div>
+          <div>
+            <label>Hledat zákazníka</label>
+            <input id="historyCustomer" placeholder="firma / jméno" oninput="renderHistory()"/>
+          </div>
+        </div>
+        <div id="historyList" style="margin-top:10px;"></div>
+      </div>
     </div>
   </div>
 </main>
@@ -196,6 +230,7 @@
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle" onclick="event.stopPropagation()">
     <h4 id="modalTitle">Záznam</h4>
     <div class="meta" id="modalMeta"></div>
+    <div id="modalPhotos" class="thumbs"></div>
     <div class="actions">
       <button onclick="startEditFromModal()">Upravit</button>
       <button onclick="confirmDeleteFromModal()">Smazat</button>
@@ -1083,11 +1118,18 @@
     editingId = null;
     document.getElementById("editPill").style.display = "none";
     document.getElementById("job").value = "";
+    document.getElementById("customer").value = "";
+    document.getElementById("machine").value = "";
     document.getElementById("desc").value = "";
+    document.getElementById("photos").value = "";
     document.getElementById("break").value = 0;
   }
 
-  function addOrUpdateEntry(){
+  async function addOrUpdateEntry(){
+    const arr = load();
+    const existing = editingId ? arr.find(x => x.id === editingId) : null;
+    const files = document.getElementById("photos").files;
+    const newPhotos = files && files.length ? await filesToDataUrls(files) : null;
     const e = {
       id: editingId || (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random()),
       date: document.getElementById("date").value,
@@ -1096,11 +1138,13 @@
       breakMin: +(document.getElementById("break").value || 0),
       rate: +(document.getElementById("rate").value || 0),
       job: (document.getElementById("job").value || "").trim(),
-      desc: (document.getElementById("desc").value || "").trim()
+      customer: (document.getElementById("customer").value || "").trim(),
+      machine: (document.getElementById("machine").value || "").trim(),
+      desc: (document.getElementById("desc").value || "").trim(),
+      photos: newPhotos !== null ? newPhotos : (existing?.photos || [])
     };
     if(!e.date || !e.from || !e.to) return alert("Vyplň datum a časy.");
 
-    const arr = load();
     const idx = arr.findIndex(x => x.id === e.id);
     if(idx >= 0) arr[idx] = e; else arr.push(e);
     save(arr);
@@ -1207,11 +1251,12 @@
       const badge = isJobArchived(e.job)
         ? '<span class="pill">Archiv</span>'
         : (isJobPaid(e.job) ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Otevřené</span>');
+      const extraBits = [e.customer, e.machine].filter(Boolean).map(esc).join(' • ');
       html += `
         <div class="entry" onclick="openEntryActions('${e.id}')">
           <div class="topline">
             <div><b>${esc(e.from)}–${esc(e.to)}</b></div>
-            <div>${esc(e.job) || "<i>(bez zakázky)</i>"}<div style="margin-top:4px;">${badge}</div></div>
+            <div>${esc(e.job) || "<i>(bez zakázky)</i>"}<div style="margin-top:4px;">${badge}</div><div class="submeta">${extraBits || ''}</div></div>
             <div>${esc(formatHM(mins))}</div>
             <div>${esc(formatMoney(money))}</div>
           </div>
@@ -1241,6 +1286,7 @@
               <button onclick="event.stopPropagation();renameJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Přejmenovat</button>
               <button class="warn" onclick="event.stopPropagation();deleteJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Smazat zakázku</button>
               <button onclick="event.stopPropagation();openPDFMenu('${esc(j.name).replaceAll("'","&#39;")}')">PDF zakázky</button>
+              <button class="primary" onclick="event.stopPropagation();openInvoiceForJob('${esc(j.name).replaceAll("'","&#39;")}')">Faktura</button>
             </div>
           </td>
         </tr>`)
@@ -1256,6 +1302,48 @@
       </div>` : "";
 
     refreshPDFJobSelect();
+    renderHistory();
+  }
+
+  function renderHistory(){
+    const machineQ = String(document.getElementById('historyMachine')?.value || '').trim().toLowerCase();
+    const customerQ = String(document.getElementById('historyCustomer')?.value || '').trim().toLowerCase();
+    const listEl = document.getElementById('historyList');
+    if(!listEl) return;
+    const rows = load()
+      .filter(e => !machineQ || String(e.machine || '').toLowerCase().includes(machineQ))
+      .filter(e => !customerQ || String(e.customer || '').toLowerCase().includes(customerQ))
+      .sort((a,b)=> (b.date+a.id).localeCompare(a.date+b.id))
+      .slice(0, 30);
+    if(!rows.length){
+      listEl.innerHTML = '<i>Sem napiš stroj nebo zákazníka a zobrazí se poslední historie.</i>';
+      return;
+    }
+    listEl.innerHTML = rows.map(e => {
+      const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+      const thumb = (e.photos && e.photos[0]) ? `<img src="${e.photos[0].dataUrl || e.photos[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">` : '';
+      return `<div class="history-item">
+        <div style="display:flex;gap:10px;align-items:flex-start;">${thumb}<div style="flex:1">
+          <b>${esc(e.job || '(bez zakázky)')}</b>
+          <div class="meta-line">${esc(e.date)} • ${esc(e.from)}–${esc(e.to)} • ${esc(formatHM(mins))}</div>
+          <div class="meta-line">${esc(e.customer || '')}${e.customer && e.machine ? ' • ' : ''}${esc(e.machine || '')}</div>
+          <div style="margin-top:6px;">${esc(e.desc || '')}</div>
+        </div></div>
+      </div>`;
+    }).join('');
+  }
+
+  function openInvoiceForJob(jobName){
+    const normalized = normalizeJobName(jobName);
+    const entries = load().filter(e => normalizeJobName(e.job) === normalized).sort((a,b)=> (b.date+b.to).localeCompare(a.date+a.to));
+    const latest = entries[0] || {};
+    openPDFMenu(jobName);
+    const docTypeEl = document.getElementById('pdfDocType'); if(docTypeEl) docTypeEl.value = 'invoice';
+    handlePDFDocTypeChange();
+    const item = document.getElementById('invoiceItemLabel'); if(item && !item.value) item.value = latest.machine ? `Servisní práce – ${latest.machine}` : 'Servisní práce dle výkazu';
+    const cname = document.getElementById('invoiceCustomerName'); if(cname && latest.customer) cname.value = latest.customer;
+    const note = document.getElementById('invoiceNote'); if(note && latest.machine && !note.value) note.value = `Zakázka: ${jobName}
+Stroj: ${latest.machine}`;
   }
 
   function openEntryActions(id){
@@ -1269,7 +1357,15 @@
       `Datum: <b>${esc(e.date)}</b><br>`+
       `Čas: <b>${esc(e.from)}–${esc(e.to)}</b>, Přestávka: <b>${esc(e.breakMin||0)} min</b><br>`+
       `Zakázka: <b>${esc(e.job || "—")}</b><br>`+
+      `${e.customer ? `Zákazník: <b>${esc(e.customer)}</b><br>` : ''}`+
+      `${e.machine ? `Stroj: <b>${esc(e.machine)}</b><br>` : ''}`+
       `Čistý čas: <b>${esc(formatHM(mins))}</b>, Částka: <b>${esc(formatMoney(money))}</b>`;
+    const photoWrap = document.getElementById('modalPhotos');
+    if(photoWrap){
+      const photos = e.photos || [];
+      photoWrap.innerHTML = photos.map(p => `<a href="${p.dataUrl || p}" target="_blank" rel="noopener"><img src="${p.dataUrl || p}" alt="foto"></a>`).join('');
+      photoWrap.style.display = photos.length ? 'flex' : 'none';
+    }
 
     const btn = document.getElementById("modalPayBtn");
     const archiveBtn = document.getElementById("modalArchiveBtn");
@@ -1516,7 +1612,7 @@
             <td>${esc(e.from)}–${esc(e.to)}</td>
             <td>${esc(e.breakMin||0)} min</td>
             <td>${esc(formatHM(mins))}</td>
-            <td>${esc(e.desc)}</td>
+            <td>${esc([e.customer, e.machine, e.desc].filter(Boolean).join(' • '))}</td>
             <td>${esc(e.rate||0)}</td>
             <td>${esc(formatMoney(money))}</td>
           </tr>`;
@@ -1638,7 +1734,7 @@
       const hours = mins / 60;
       const rate = +(e.rate || supplier.defaultRate || 0);
       const lineTotal = Math.round(hours * rate);
-      const parts = [e.date, `${e.from}–${e.to}`, e.desc].filter(Boolean);
+      const parts = [e.date, `${e.from}–${e.to}`, e.machine, e.desc].filter(Boolean);
       return `<tr><td>${esc(itemLabel)}</td><td>${esc(parts.join(' • '))}</td><td>${hours.toFixed(2).replace('.', ',')}</td><td>${esc(formatMoney(rate))}</td><td>${esc(formatMoney(lineTotal))}</td></tr>`;
     }).join('');
     return `

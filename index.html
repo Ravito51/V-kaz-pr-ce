@@ -84,6 +84,7 @@
     .tab-btn{width:auto;padding:8px 14px;border-radius:999px}
     .tab-btn.active{background:var(--brand);color:#fff;border-color:var(--brand)}
     .muted-note{color:var(--muted);font-size:12px;margin-top:6px}
+    .modal-footer{position:sticky;bottom:0;background:#fff;padding-top:10px;border-top:1px solid var(--line);margin-top:12px}
   </style>
 </head>
 <body>
@@ -308,6 +309,17 @@
 
       <div class="card section-tight" style="box-shadow:none;border:1px solid var(--line);margin-bottom:10px;">
         <h3 style="margin-top:0;">Odběratel</h3>
+        <div class="row" style="margin-bottom:8px;">
+          <div>
+            <label>Uložení odběratelé</label>
+            <select id="invoiceCustomerSavedSelect" onchange="applySavedCustomerToInvoice(this.value)"></select>
+          </div>
+          <div class="actions" style="align-items:end;">
+            <button type="button" onclick="newInvoiceCustomerToForm()">Nový odběratel</button>
+            <button type="button" onclick="saveCurrentInvoiceCustomer()">Uložit odběratele</button>
+            <button type="button" class="warn" onclick="deleteSelectedInvoiceCustomer()">Smazat odběratele</button>
+          </div>
+        </div>
         <div class="lookup-row">
           <div>
             <label>Hledat podle IČO / DIČ</label>
@@ -353,7 +365,7 @@
     </div>
 </div>
 
-    <div class="actions" style="margin-top:12px;">
+    <div class="actions modal-footer">
       <button onclick="printPDF('print')">Tisk</button>
       <button onclick="printPDF('save')" class="primary">Uložit PDF</button>
       <button onclick="closePDFMenu()">Zavřít</button>
@@ -536,6 +548,103 @@
   function saveInvoiceCustomers(list){
     localStorage.setItem(KEY+"_invoiceCustomers", JSON.stringify(list || []));
   }
+  function sortCustomers(list){
+    return (list || []).slice().sort((a,b)=> String(a.name||'').localeCompare(String(b.name||''), undefined, {sensitivity:'base'}));
+  }
+  function renderInvoiceCustomerSelects(selectedKey=''){
+    const list = sortCustomers(getInvoiceCustomers());
+    const opts = ['<option value="">— vyber odběratele —</option>'].concat(list.map(c => {
+      const key = normalizeTaxId(c.ico) || normalizeTaxId(c.dic) || String(c.name||'').trim().toLowerCase();
+      const label = [c.name || '(bez názvu)', c.ico ? 'IČO '+c.ico : '', c.dic ? 'DIČ '+c.dic : ''].filter(Boolean).join(' • ');
+      return `<option value="${esc(key)}">${esc(label)}</option>`;
+    })).join('');
+    ['invoiceCustomerSavedSelect','customerManageSelect'].forEach(id => {
+      const sel = document.getElementById(id);
+      if(!sel) return;
+      sel.innerHTML = opts;
+      if(selectedKey) sel.value = selectedKey;
+    });
+  }
+  function getCustomerByKey(key){
+    const k = String(key || '').trim();
+    if(!k) return null;
+    return getInvoiceCustomers().find(c => (normalizeTaxId(c.ico) || normalizeTaxId(c.dic) || String(c.name||'').trim().toLowerCase()) === k) || null;
+  }
+  function applySavedCustomerToInvoice(key){
+    const c = getCustomerByKey(key);
+    if(!c) return;
+    fillCustomerForm(c);
+    const sel = document.getElementById('invoiceCustomerSavedSelect');
+    if(sel) sel.value = key;
+  }
+  function newInvoiceCustomerToForm(){
+    fillCustomerForm({name:'',ico:'',dic:'',address:''});
+    const sel = document.getElementById('invoiceCustomerSavedSelect');
+    if(sel) sel.value = '';
+    setInvoiceLookupStatus('');
+  }
+  function saveCurrentInvoiceCustomer(){
+    const data = {
+      customerName: document.getElementById('invoiceCustomerName')?.value || '',
+      customerIco: document.getElementById('invoiceCustomerIco')?.value || '',
+      customerDic: document.getElementById('invoiceCustomerDic')?.value || '',
+      customerAddress: document.getElementById('invoiceCustomerAddress')?.value || ''
+    };
+    if(!String(data.customerName||data.customerIco||data.customerDic||data.customerAddress).trim()) return alert('Vyplň údaje odběratele.');
+    saveCustomerFromInvoice(data);
+    const key = normalizeTaxId(data.customerIco) || normalizeTaxId(data.customerDic) || String(data.customerName).trim().toLowerCase();
+    renderInvoiceCustomerSelects(key);
+    alert('Odběratel uložen.');
+  }
+  function deleteSelectedInvoiceCustomer(){
+    const sel = document.getElementById('invoiceCustomerSavedSelect');
+    const key = sel?.value || '';
+    if(!key) return alert('Vyber uloženého odběratele, kterého chceš smazat.');
+    const c = getCustomerByKey(key);
+    if(!c) return;
+    if(!confirm(`Opravdu smazat odběratele ${c.name || c.ico || c.dic}?`)) return;
+    const next = getInvoiceCustomers().filter(x => x !== c);
+    saveInvoiceCustomers(next);
+    renderInvoiceCustomerSelects('');
+    newInvoiceCustomerToForm();
+  }
+  function loadCustomerToManageForm(key){
+    const c = getCustomerByKey(key);
+    document.getElementById('customerManageName').value = c?.name || '';
+    document.getElementById('customerManageIco').value = c?.ico || '';
+    document.getElementById('customerManageDic').value = c?.dic || '';
+    document.getElementById('customerManageAddress').value = c?.address || '';
+  }
+  function newCustomerManageForm(){
+    const sel = document.getElementById('customerManageSelect'); if(sel) sel.value = '';
+    loadCustomerToManageForm('');
+  }
+  function saveCustomerManageForm(){
+    const data = {
+      customerName: document.getElementById('customerManageName')?.value || '',
+      customerIco: document.getElementById('customerManageIco')?.value || '',
+      customerDic: document.getElementById('customerManageDic')?.value || '',
+      customerAddress: document.getElementById('customerManageAddress')?.value || ''
+    };
+    if(!String(data.customerName||data.customerIco||data.customerDic||data.customerAddress).trim()) return alert('Vyplň údaje odběratele.');
+    saveCustomerFromInvoice(data);
+    const key = normalizeTaxId(data.customerIco) || normalizeTaxId(data.customerDic) || String(data.customerName).trim().toLowerCase();
+    renderInvoiceCustomerSelects(key);
+    loadCustomerToManageForm(key);
+    alert('Odběratel uložen.');
+  }
+  function deleteCustomerManageForm(){
+    const sel = document.getElementById('customerManageSelect');
+    const key = sel?.value || '';
+    if(!key) return alert('Vyber odběratele, kterého chceš smazat.');
+    const c = getCustomerByKey(key);
+    if(!c) return;
+    if(!confirm(`Opravdu smazat odběratele ${c.name || c.ico || c.dic}?`)) return;
+    const next = getInvoiceCustomers().filter(x => x !== c);
+    saveInvoiceCustomers(next);
+    renderInvoiceCustomerSelects('');
+    newCustomerManageForm();
+  }
   function normalizeTaxId(v){
     return String(v || '').replace(/\s+/g,'').toUpperCase();
   }
@@ -568,6 +677,8 @@
     if(idx >= 0) list[idx] = { ...list[idx], ...customer };
     else list.unshift(customer);
     saveInvoiceCustomers(list.slice(0, 300));
+    const key = normalizeTaxId(customer.ico) || normalizeTaxId(customer.dic) || String(customer.name || '').trim().toLowerCase();
+    renderInvoiceCustomerSelects(key);
   }
   function fillCustomerForm(customer){
     if(!customer) return false;
@@ -576,6 +687,8 @@
     document.getElementById('invoiceCustomerDic').value = customer.dic || '';
     document.getElementById('invoiceCustomerAddress').value = customer.address || '';
     document.getElementById('invoiceCustomerLookup').value = customer.ico || customer.dic || customer.name || '';
+    const key = normalizeTaxId(customer.ico) || normalizeTaxId(customer.dic) || String(customer.name || '').trim().toLowerCase();
+    const sel = document.getElementById('invoiceCustomerSavedSelect'); if(sel) sel.value = key;
     return true;
   }
   async function lookupCustomerByTaxId(){
@@ -823,6 +936,7 @@
     document.getElementById('invoiceSupplierAccount').value = p?.account || '';
     document.getElementById('invoiceSupplierIban').value = p?.iban || '';
     document.getElementById('invoiceCustomerLookup').value = '';
+    renderInvoiceCustomerSelects('');
   }
   function handlePDFDocTypeChange(){
     const type = document.getElementById('pdfDocType')?.value || 'report';
@@ -867,6 +981,37 @@
       displayName: String(name || "").trim()
     };
     saveJobMeta(meta);
+  }
+  function renameJobPrompt(name){
+    const oldName = String(name || '').trim();
+    if(!oldName) return;
+    const newName = prompt('Nový název zakázky:', oldName);
+    if(newName === null) return;
+    const nextName = String(newName || '').trim();
+    if(!nextName || nextName === oldName) return;
+    const arr = load().map(e => normalizeJobName(e.job) === normalizeJobName(oldName) ? {...e, job: nextName} : e);
+    save(arr);
+    const jobs = loadJobs().map(j => normalizeJobName(j) === normalizeJobName(oldName) ? nextName : j);
+    saveJobs(Array.from(new Set(jobs.map(j => j.trim()).filter(Boolean))));
+    const meta = loadJobMeta();
+    const oldKey = normalizeJobName(oldName);
+    const newKey = normalizeJobName(nextName);
+    if(meta[oldKey]) { meta[newKey] = {...meta[oldKey], displayName: nextName}; delete meta[oldKey]; saveJobMeta(meta); }
+    renderJobDatalist();
+    render();
+  }
+  function deleteJobPrompt(name){
+    const jobName = String(name || '').trim();
+    if(!jobName) return;
+    const count = load().filter(e => normalizeJobName(e.job) === normalizeJobName(jobName)).length;
+    if(!confirm(`Opravdu smazat zakázku „${jobName}“ a všech ${count} jejích záznamů?`)) return;
+    save(load().filter(e => normalizeJobName(e.job) !== normalizeJobName(jobName)));
+    saveJobs(loadJobs().filter(j => normalizeJobName(j) !== normalizeJobName(jobName)));
+    const meta = loadJobMeta();
+    delete meta[normalizeJobName(jobName)];
+    saveJobMeta(meta);
+    renderJobDatalist();
+    render();
   }
 
   function formatMoney(amount) {
@@ -1083,6 +1228,8 @@
                 : (j.paid
                   ? `<button onclick="event.stopPropagation();markJobUnpaid('${esc(j.name).replaceAll("'","&#39;")}')">Znovu otevřít</button><button class="warn" onclick="event.stopPropagation();archiveJob('${esc(j.name).replaceAll("'","&#39;")}')">Archivovat</button>`
                   : `<button class="ok" onclick="event.stopPropagation();markJobPaid('${esc(j.name).replaceAll("'","&#39;")}')">Označit zaplacené</button>`)}
+              <button onclick="event.stopPropagation();renameJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Přejmenovat</button>
+              <button class="warn" onclick="event.stopPropagation();deleteJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Smazat zakázku</button>
               <button onclick="event.stopPropagation();openPDFMenu('${esc(j.name).replaceAll("'","&#39;")}')">PDF zakázky</button>
             </div>
           </td>
@@ -1214,7 +1361,7 @@
   function getLogoDataUri(){
     return localStorage.getItem(KEY+"_logo") || "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxIiBoZWlnaHQ9IjEiPjwvc3ZnPg==";
   }
-  function openSettings(){ document.getElementById("settingsBackdrop").style.display = "flex"; }
+  function openSettings(){ renderInvoiceCustomerSelects(document.getElementById('customerManageSelect')?.value || ""); document.getElementById("settingsBackdrop").style.display = "flex"; }
   function closeSettings(ev){
     if(ev && ev.target && ev.target.id !== "settingsBackdrop") return;
     const el = document.getElementById("settingsBackdrop");

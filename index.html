@@ -63,6 +63,16 @@
     .thumbs img{width:88px;height:88px;object-fit:cover;border-radius:10px;border:1px solid var(--line);background:#fff}
     .history-item{border:1px solid var(--line);border-radius:12px;padding:10px;margin-top:8px;background:#fff}
     .history-item .meta-line{font-size:12px;color:var(--muted);margin-top:4px}
+    .job-card{border:1px solid var(--line);border-radius:14px;padding:12px;background:#fff;margin-top:10px;cursor:pointer}
+    .job-card:hover{box-shadow:0 8px 22px rgba(16,24,40,.08)}
+    .job-card-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .job-card-title{font-weight:700;font-size:16px}
+    .job-card-sub{font-size:12px;color:var(--muted);margin-top:4px}
+    .job-card-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+    .job-detail-list{display:grid;gap:10px;margin-top:12px;max-height:52vh;overflow:auto;padding-right:4px}
+    .job-detail-item{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}
+    .job-detail-item .meta-line{font-size:12px;color:var(--muted);margin-top:4px}
+
 
     .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:12px;z-index:9999}
     .modal{background:#fff;border-radius:14px;max-width:560px;width:min(100%, 560px);max-height:min(92vh, 980px);overflow:auto;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:14px}
@@ -197,7 +207,7 @@
           <button class="primary" onclick="openPDFMenu()">PDF</button>
         </div>
 
-        <small class="hint">Dole se automaticky zobrazuje dnešek. Tlačítko Měsíc nastaví Od–Do na celý vybraný měsíc.</small>
+        <small class="hint">Na hlavní ploše se zobrazují už jen zakázky. Po kliknutí na zakázku otevřeš celý její deník a jednotlivé záznamy můžeš upravit.</small>
         <div class="muted-note" id="viewHint"></div>
 
         <div class="sum">
@@ -208,20 +218,7 @@
         <div id="list" style="margin-top:10px;"></div>
         <div class="jobsum" id="jobSummary"></div>
       </div>
-      <div class="card">
-        <h3>Historie stroje / zákazníka</h3>
-        <div class="row">
-          <div>
-            <label>Hledat stroj</label>
-            <input id="historyMachine" placeholder="např. Manitou / SPZ / VIN" oninput="renderHistory()"/>
-          </div>
-          <div>
-            <label>Hledat zákazníka</label>
-            <input id="historyCustomer" placeholder="firma / jméno" oninput="renderHistory()"/>
-          </div>
-        </div>
-        <div id="historyList" style="margin-top:10px;"></div>
-      </div>
+
     </div>
   </div>
 </main>
@@ -239,6 +236,22 @@
       <button class="primary" onclick="closeModal()">Zavřít</button>
     </div>
   </div>
+
+</div>
+
+<div class="modal-backdrop" id="jobDetailBackdrop" onclick="closeJobDetail(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="jobDetailTitle" onclick="event.stopPropagation()" style="max-width:980px;width:min(100%,980px);">
+    <h4 id="jobDetailTitle">Detail zakázky</h4>
+    <div class="meta" id="jobDetailMeta"></div>
+    <div class="actions" style="margin-top:10px;">
+      <button id="jobDetailPayBtn" class="ok" onclick="toggleJobDetailPaid()">Označit zaplacené</button>
+      <button id="jobDetailArchiveBtn" onclick="toggleJobDetailArchived()">Archivovat</button>
+      <button onclick="renameCurrentJobFromDetail()">Přejmenovat zakázku</button>
+      <button onclick="openPDFForCurrentJob()" class="primary">PDF zakázky</button>
+      <button onclick="closeJobDetail()">Zavřít</button>
+    </div>
+    <div id="jobDetailList" class="job-detail-list"></div>
+  </div>
 </div>
 
 <div class="modal-backdrop" id="pdfBackdrop" onclick="closePDFMenu(event)">
@@ -248,12 +261,22 @@
       Vyber, jestli chceš vytvořit pracovní výkaz, nebo rovnou fakturu.
       <br>PDF se otevře přes tiskový dialog prohlížeče. Pro uložení zvol „Uložit jako PDF“.
     </div>
-    <div class="row">
+    <div class="row-3">
       <div>
         <label>Typ dokumentu</label>
         <select id="pdfDocType" onchange="handlePDFDocTypeChange()">
           <option value="report">Pracovní výkaz</option>
           <option value="invoice">Faktura</option>
+        </select>
+      </div>
+      <div>
+        <label>Rozsah</label>
+        <select id="pdfScope" onchange="refreshPDFJobSelect()">
+          <option value="current">Jen aktuální záložka</option>
+          <option value="open">Jen otevřené</option>
+          <option value="paid">Jen zaplacené</option>
+          <option value="archived">Jen archiv</option>
+          <option value="all">Vše bez ohledu na stav</option>
         </select>
       </div>
       <div>
@@ -1268,70 +1291,47 @@
     sumHoursEl.textContent = formatHM(totalMin);
     sumMoneyEl.textContent = formatMoney(totalMoney);
 
-    const rows = Array.from(byJob.values())
-      .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:"base"}))
-      .map(j => `
-        <tr>
-          <td>${esc(j.name)}</td>
-          <td>${j.archived ? '<span class="pill">Archiv</span>' : (j.paid ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Nedokončené</span>')}</td>
-          <td>${esc(formatHM(j.min))}</td>
-          <td>${esc(formatMoney(j.money))}</td>
-          <td>
-            <div class="job-actions">
-              ${j.archived
-                ? `<button onclick="event.stopPropagation();restoreJobFromArchive('${esc(j.name).replaceAll("'","&#39;")}')">Vrátit z archivu</button>`
-                : (j.paid
-                  ? `<button onclick="event.stopPropagation();markJobUnpaid('${esc(j.name).replaceAll("'","&#39;")}')">Znovu otevřít</button><button class="warn" onclick="event.stopPropagation();archiveJob('${esc(j.name).replaceAll("'","&#39;")}')">Archivovat</button>`
-                  : `<button class="ok" onclick="event.stopPropagation();markJobPaid('${esc(j.name).replaceAll("'","&#39;")}')">Označit zaplacené</button>`)}
-              <button onclick="event.stopPropagation();renameJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Přejmenovat</button>
-              <button class="warn" onclick="event.stopPropagation();deleteJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Smazat zakázku</button>
-              <button onclick="event.stopPropagation();openPDFMenu('${esc(j.name).replaceAll("'","&#39;")}')">PDF zakázky</button>
-              <button class="primary" onclick="event.stopPropagation();openInvoiceForJob('${esc(j.name).replaceAll("'","&#39;")}')">Faktura</button>
+    const jobs = Array.from(byJob.values())
+      .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:"base"}));
+
+    const cards = jobs.map(j => {
+      const latest = arr
+        .filter(e => normalizeJobName(e.job) === normalizeJobName(j.name))
+        .sort((a,b)=> (b.date+b.to).localeCompare(a.date+a.to))[0];
+      const statePill = j.archived ? '<span class="pill">Archiv</span>' : (j.paid ? '<span class="pill paid">Zaplaceno</span>' : '<span class="pill open">Otevřené</span>');
+      const info = [latest?.customer, latest?.machine].filter(Boolean).map(esc).join(' • ');
+      return `
+        <div class="job-card" onclick="openJobDetail('${esc(j.name).replaceAll("'","&#39;")}')">
+          <div class="job-card-head">
+            <div>
+              <div class="job-card-title">${esc(j.name)}</div>
+              <div class="job-card-sub">${statePill}${info ? ` • ${info}` : ''}</div>
             </div>
-          </td>
-        </tr>`)
-      .join("");
+            <div style="text-align:right;">
+              <div><b>${esc(formatHM(j.min))}</b></div>
+              <div class="job-card-sub">${esc(formatMoney(j.money))}</div>
+            </div>
+          </div>
+          <div class="job-card-actions">
+            ${j.archived
+              ? `<button onclick="event.stopPropagation();restoreJobFromArchive('${esc(j.name).replaceAll("'","&#39;")}')">Vrátit z archivu</button>`
+              : (j.paid
+                ? `<button onclick="event.stopPropagation();markJobUnpaid('${esc(j.name).replaceAll("'","&#39;")}')">Znovu otevřít</button><button class="warn" onclick="event.stopPropagation();archiveJob('${esc(j.name).replaceAll("'","&#39;")}')">Archivovat</button>`
+                : `<button class="ok" onclick="event.stopPropagation();markJobPaid('${esc(j.name).replaceAll("'","&#39;")}')">Označit zaplacené</button>`)}
+            <button onclick="event.stopPropagation();renameJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Přejmenovat</button>
+            <button class="warn" onclick="event.stopPropagation();deleteJobPrompt('${esc(j.name).replaceAll("'","&#39;")}')">Smazat zakázku</button>
+            <button onclick="event.stopPropagation();openPDFMenu('${esc(j.name).replaceAll("'","&#39;")}')">PDF zakázky</button>
+            <button class="primary" onclick="event.stopPropagation();openInvoiceForJob('${esc(j.name).replaceAll("'","&#39;")}')">Faktura</button>
+          </div>
+        </div>`;
+    }).join("");
 
-    jobSumEl.innerHTML = rows ? `
-      <div style="margin-top:14px;">
-        <div class="list-day">${currentView === "archived" ? "Archiv zakázek" : (currentView === "paid" ? "Zaplacené zakázky" : "Otevřené zakázky")}</div>
-        <table>
-          <tr><th>Zakázka</th><th>Stav</th><th>Hodin</th><th>Částka</th><th>Akce</th></tr>
-          ${rows}
-        </table>
-      </div>` : "";
-
+    listEl.innerHTML = cards || "<i>Žádné zakázky v období.</i>";
+    jobSumEl.innerHTML = "";
     refreshPDFJobSelect();
-    renderHistory();
   }
 
-  function renderHistory(){
-    const machineQ = String(document.getElementById('historyMachine')?.value || '').trim().toLowerCase();
-    const customerQ = String(document.getElementById('historyCustomer')?.value || '').trim().toLowerCase();
-    const listEl = document.getElementById('historyList');
-    if(!listEl) return;
-    const rows = load()
-      .filter(e => !machineQ || String(e.machine || '').toLowerCase().includes(machineQ))
-      .filter(e => !customerQ || String(e.customer || '').toLowerCase().includes(customerQ))
-      .sort((a,b)=> (b.date+a.id).localeCompare(a.date+b.id))
-      .slice(0, 30);
-    if(!rows.length){
-      listEl.innerHTML = '<i>Sem napiš stroj nebo zákazníka a zobrazí se poslední historie.</i>';
-      return;
-    }
-    listEl.innerHTML = rows.map(e => {
-      const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
-      const thumb = (e.photos && e.photos[0]) ? `<img src="${e.photos[0].dataUrl || e.photos[0]}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">` : '';
-      return `<div class="history-item">
-        <div style="display:flex;gap:10px;align-items:flex-start;">${thumb}<div style="flex:1">
-          <b>${esc(e.job || '(bez zakázky)')}</b>
-          <div class="meta-line">${esc(e.date)} • ${esc(e.from)}–${esc(e.to)} • ${esc(formatHM(mins))}</div>
-          <div class="meta-line">${esc(e.customer || '')}${e.customer && e.machine ? ' • ' : ''}${esc(e.machine || '')}</div>
-          <div style="margin-top:6px;">${esc(e.desc || '')}</div>
-        </div></div>
-      </div>`;
-    }).join('');
-  }
+  function renderHistory(){ }
 
   function openInvoiceForJob(jobName){
     const normalized = normalizeJobName(jobName);
@@ -1344,6 +1344,131 @@
     const cname = document.getElementById('invoiceCustomerName'); if(cname && latest.customer) cname.value = latest.customer;
     const note = document.getElementById('invoiceNote'); if(note && latest.machine && !note.value) note.value = `Zakázka: ${jobName}
 Stroj: ${latest.machine}`;
+  }
+
+
+  let currentJobDetailName = "";
+
+  function getScopeViewForPDF(){
+    const scope = document.getElementById("pdfScope")?.value || "current";
+    if(scope === "current") return currentView;
+    return scope;
+  }
+  function entryMatchesView(e, view){
+    const paid = isJobPaid(e.job);
+    const archived = isJobArchived(e.job);
+    if(view === "open") return !paid && !archived;
+    if(view === "paid") return paid && !archived;
+    if(view === "archived") return archived;
+    return true;
+  }
+  function getVisibleEntriesForView(view){
+    return load()
+      .filter(e => inFilter(e.date))
+      .filter(e => entryMatchesView(e, view))
+      .sort((a,b) => (a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)));
+  }
+  function editEntryById(id){
+    const e = load().find(x => x.id === id);
+    if(!e) return;
+    document.getElementById("date").value = e.date;
+    document.getElementById("from").value = e.from;
+    document.getElementById("to").value = e.to;
+    document.getElementById("break").value = e.breakMin||0;
+    document.getElementById("rate").value = e.rate||0;
+    document.getElementById("job").value = e.job||"";
+    document.getElementById("customer").value = e.customer||"";
+    document.getElementById("machine").value = e.machine||"";
+    document.getElementById("desc").value = e.desc||"";
+    editingId = e.id;
+    document.getElementById("editPill").style.display = "inline-block";
+    closeJobDetail();
+    window.scrollTo({top:0, behavior:"smooth"});
+  }
+  function deleteEntryById(id){
+    const e = load().find(x => x.id === id);
+    if(!e) return;
+    if(!confirm("Opravdu chceš tento záznam smazat?")) return;
+    save(load().filter(x => x.id !== id));
+    render();
+    if(currentJobDetailName) openJobDetail(currentJobDetailName);
+  }
+  function openJobDetail(jobName){
+    currentJobDetailName = jobName;
+    const entries = load()
+      .filter(e => normalizeJobName(e.job) === normalizeJobName(jobName))
+      .sort((a,b)=> (b.date+b.to).localeCompare(a.date+a.to));
+    const totalMin = entries.reduce((sum,e)=> sum + Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0)), 0);
+    const totalMoney = entries.reduce((sum,e)=> {
+      const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+      return sum + Math.round((mins/60) * (e.rate||0));
+    }, 0);
+    document.getElementById("jobDetailTitle").textContent = `Detail zakázky: ${jobName}`;
+    document.getElementById("jobDetailMeta").innerHTML = `Počet záznamů: <b>${entries.length}</b> &nbsp;|&nbsp; Hodin: <b>${formatHM(totalMin)}</b> &nbsp;|&nbsp; Celkem: <b>${formatMoney(totalMoney)}</b>`;
+    document.getElementById("jobDetailList").innerHTML = entries.map(e => {
+      const mins = Math.max(0, minutesBetween(e.from, e.to) - (e.breakMin||0));
+      const money = Math.round((mins/60) * (e.rate||0));
+      const photos = (e.photos || []).map(p => `<img src="${p.dataUrl || p}" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--line);">`).join("");
+      return `<div class="job-detail-item">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+          <div>
+            <b>${esc(e.date)}</b> • ${esc(e.from)}–${esc(e.to)} • ${esc(formatHM(mins))}
+            <div class="meta-line">${esc(e.customer || '')}${e.customer && e.machine ? ' • ' : ''}${esc(e.machine || '')}</div>
+            <div class="meta-line">Přestávka: ${esc(String(e.breakMin||0))} min • Sazba: ${esc(String(e.rate||0))} • Částka: ${esc(formatMoney(money))}</div>
+          </div>
+          <div class="actions">
+            <button onclick="editEntryById('${e.id}')">Upravit</button>
+            <button class="warn" onclick="deleteEntryById('${e.id}')">Smazat záznam</button>
+          </div>
+        </div>
+        <div style="margin-top:8px;">${esc(e.desc || '') || '<i>Bez popisu</i>'}</div>
+        ${photos ? `<div class="thumbs" style="margin-top:8px;">${photos}</div>` : ''}
+      </div>`;
+    }).join("") || "<i>Zakázka zatím nemá žádné záznamy.</i>";
+
+    const payBtn = document.getElementById("jobDetailPayBtn");
+    const archBtn = document.getElementById("jobDetailArchiveBtn");
+    if(isJobArchived(jobName)){
+      payBtn.textContent = "Zakázka je v archivu";
+      payBtn.disabled = true;
+      archBtn.textContent = "Vrátit z archivu";
+      archBtn.style.display = "inline-block";
+    } else if(isJobPaid(jobName)){
+      payBtn.textContent = "Znovu otevřít zakázku";
+      payBtn.disabled = false;
+      archBtn.textContent = "Archivovat";
+      archBtn.style.display = "inline-block";
+    } else {
+      payBtn.textContent = "Označit zaplacené";
+      payBtn.disabled = false;
+      archBtn.style.display = "none";
+    }
+    document.getElementById("jobDetailBackdrop").style.display = "flex";
+  }
+  function closeJobDetail(ev){
+    if(ev && ev.target && ev.target.id !== "jobDetailBackdrop") return;
+    document.getElementById("jobDetailBackdrop").style.display = "none";
+  }
+  function toggleJobDetailPaid(){
+    if(!currentJobDetailName) return;
+    if(isJobPaid(currentJobDetailName)) markJobUnpaid(currentJobDetailName); else markJobPaid(currentJobDetailName);
+    openJobDetail(currentJobDetailName);
+  }
+  function toggleJobDetailArchived(){
+    if(!currentJobDetailName) return;
+    if(isJobArchived(currentJobDetailName)) restoreJobFromArchive(currentJobDetailName); else archiveJob(currentJobDetailName);
+    openJobDetail(currentJobDetailName);
+  }
+  function renameCurrentJobFromDetail(){
+    if(!currentJobDetailName) return;
+    const old = currentJobDetailName;
+    renameJobPrompt(old);
+    const updated = getKnownJobs(true).find(j => normalizeJobName(j) === normalizeJobName(old)) || old;
+    currentJobDetailName = updated;
+  }
+  function openPDFForCurrentJob(){
+    if(!currentJobDetailName) return;
+    openPDFMenu(currentJobDetailName);
   }
 
   function openEntryActions(id){
@@ -1412,6 +1537,8 @@ Stroj: ${latest.machine}`;
     document.getElementById("break").value = e.breakMin||0;
     document.getElementById("rate").value = e.rate||0;
     document.getElementById("job").value = e.job||"";
+    document.getElementById("customer").value = e.customer||"";
+    document.getElementById("machine").value = e.machine||"";
     document.getElementById("desc").value = e.desc||"";
     editingId = e.id;
     document.getElementById("editPill").style.display = "inline-block";
@@ -1575,7 +1702,8 @@ Stroj: ${latest.machine}`;
   function getEntriesForPDF(){
     const mode = document.getElementById("pdfMode")?.value || "all";
     const selectedJob = (document.getElementById("pdfJobSelect")?.value || "").trim();
-    let arr = load().filter(e => inFilter(e.date));
+    const scopeView = getScopeViewForPDF();
+    let arr = getVisibleEntriesForView(scopeView);
     if(mode === "job") arr = arr.filter(e => normalizeJobName(e.job) === normalizeJobName(selectedJob));
     return arr.sort((a,b) => (a.date===b.date ? a.from.localeCompare(b.from) : a.date.localeCompare(b.date)));
   }
@@ -1633,8 +1761,10 @@ Stroj: ${latest.machine}`;
   function refreshPDFJobSelect(selectedJob = ""){
     const sel = document.getElementById("pdfJobSelect");
     if(!sel) return;
-    const jobs = getKnownJobs(true);
-    sel.innerHTML = jobs.map(j => `<option value="${esc(j)}">${esc(j)}${isJobPaid(j) ? ' • zaplaceno' : ''}</option>`).join("");
+    const scopeView = getScopeViewForPDF();
+    const jobs = Array.from(new Set(getVisibleEntriesForView(scopeView).map(e => (e.job || "").trim()).filter(Boolean)))
+      .sort((a,b)=>a.localeCompare(b, undefined, {sensitivity:"base"}));
+    sel.innerHTML = jobs.map(j => `<option value="${esc(j)}">${esc(j)}${isJobArchived(j) ? ' • archiv' : (isJobPaid(j) ? ' • zaplaceno' : '')}</option>`).join("");
     if(selectedJob && jobs.some(j => normalizeJobName(j) === normalizeJobName(selectedJob))) {
       sel.value = jobs.find(j => normalizeJobName(j) === normalizeJobName(selectedJob));
     }
@@ -1650,6 +1780,14 @@ Stroj: ${latest.machine}`;
     if(modeEl) modeEl.value = jobName ? "job" : "all";
     const docTypeEl = document.getElementById('pdfDocType');
     if(docTypeEl) docTypeEl.value = 'report';
+    const titleEl = document.getElementById('pdfTitle');
+    const scopeEl = document.getElementById("pdfScope");
+    if(scopeEl) scopeEl.value = "current";
+    if(titleEl){
+      const labels = {open:'otevřené', paid:'zaplacené', archived:'archivované'};
+      const scope = labels[currentView] || 'vybrané';
+      titleEl.textContent = `PDF / Faktura (${scope} zakázky)`;
+    }
     handlePDFModeChange();
     handlePDFDocTypeChange();
     document.getElementById("pdfBackdrop").style.display = "flex";

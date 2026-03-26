@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>RAVITO – Pracovní deník (CZ)</title>
+  <title>RAVITO – Pracovní deník 2.1</title>
   <style>
     :root {
       --brand:#0f3d6e;
@@ -1941,33 +1941,37 @@ Stroj: ${latest.machine}`;
     w.document.write(`
       <html><head><meta charset="utf-8"><title>${esc(pageTitle)}</title>
       <style>
-        body{font-family:Arial,sans-serif;padding:18px;color:#111;position:relative}
+        @page{size:A4;margin:128px 18px 28px 18px}
+        body{font-family:Arial,sans-serif;padding:0;color:#111;position:relative;margin:0}
         .page-watermark{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:0}
-        .page-watermark img{width:68%;max-width:1200px;opacity:.06;filter:grayscale(100%)}
+        .page-watermark img{width:70%;max-width:1200px;opacity:.055;filter:grayscale(100%)}
+        .page-header{position:fixed;top:0;left:0;right:0;padding:10px 18px 8px 18px;z-index:2;background:transparent}
+        .header-logo{width:100%;height:76px;object-fit:contain;display:block;margin:0 0 6px 0}
+        .header-meta{text-align:center;background:rgba(255,255,255,.88);padding:4px 8px;border-radius:10px}
+        h1{margin:0 0 4px 0;letter-spacing:.4px;font-size:22px}
+        .meta{color:#333;margin:0;line-height:1.35;font-size:12px}
         .page-content{position:relative;z-index:1}
-        .header{text-align:center;margin:0 0 18px 0}
-        .header-logo{width:100%;max-height:165px;object-fit:contain;margin:0 0 12px 0;display:block}
-        h1{margin:0 0 6px 0;letter-spacing:.4px}
-        .meta{color:#333;margin:0;line-height:1.45}
         h2{margin:18px 0 8px 0;font-size:14px}
-        table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.92)}
+        table{width:100%;border-collapse:collapse;background:rgba(255,255,255,.94)}
         th,td{border:1px solid #ddd;padding:6px;font-size:12px;vertical-align:top}
         th{background:#f3f3f3}
         .jobblock{page-break-inside:avoid;margin-top:18px}
         .subtotal{margin-top:8px;font-size:12.5px}
         .inv-head{display:flex;justify-content:space-between;gap:24px;align-items:flex-start;margin-bottom:14px}
         .party-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:16px 0}
-        .card-print{background:rgba(255,255,255,.92);padding:10px;border-radius:10px}
+        .card-print{background:rgba(255,255,255,.94);padding:10px;border-radius:10px}
         @media print {.party-grid{grid-template-columns:1fr 1fr}}
       </style></head><body>
         <div class="page-watermark"><img src="${watermark}" alt="vodoznak" onerror="this.style.display='none'"/></div>
-        <div class="page-content">
-          <div class="header">
-            <img class="header-logo" src="${logo}" alt="logo" onerror="this.style.display='none'"/>
+        <div class="page-header">
+          <img class="header-logo" src="${logo}" alt="logo" onerror="this.style.display='none'"/>
+          <div class="header-meta">
             <h1>${docType === 'invoice' ? 'FAKTURA' : 'VÝKAZ PRÁCE'}</h1>
             <p class="meta"><b>${esc(titleName)}</b><br>${esc(phone)}<br>${esc(email)}</p>
             ${docType === 'report' ? `<p class="meta">Období: <b>${esc(periodText())}</b><br>Export: <b>${exportMode === 'job' ? 'Jedna zakázka' : 'Celé období'}</b>${exportMode === 'job' ? `<br>Zakázka: <b>${esc(selectedJob)}</b>` : ''}</p>` : ''}
           </div>
+        </div>
+        <div class="page-content">
           ${bodyHtml}
         </div>
       </body></html>
